@@ -1,0 +1,1012 @@
+#!/usr/bin/env bash
+
+# ============================================================
+#                         CALAPH
+#              UNIVERSAL SYMBOLIC LANGUAGE
+# ============================================================
+
+# Requires:
+#   Bash 4+
+#   UTF-8 locale
+#
+# Run with:
+#   chmod +x calaph.sh
+#   ./calaph.sh
+
+export LC_ALL="${LC_ALL:-C.UTF-8}"
+
+# ============================================================
+# COLORS
+# ============================================================
+
+RESET='\033[0m'
+BOLD='\033[1m'
+DIM='\033[2m'
+CYAN='\033[36m'
+BLUE='\033[34m'
+MAGENTA='\033[35m'
+WHITE='\033[37m'
+GREEN='\033[32m'
+YELLOW='\033[33m'
+RED='\033[31m'
+
+# ============================================================
+# CLEAR SCREEN
+# ============================================================
+
+clear_screen() {
+    clear
+}
+
+pause_console() {
+    echo
+    printf "${DIM}Press ENTER to return to the main menu...${RESET}"
+    read -r
+}
+
+# ============================================================
+# BIG ASCII ART
+# ============================================================
+
+print_logo() {
+    printf "${CYAN}${BOLD}"
+    cat <<'EOF'
+
+   ██████╗ █████╗ ██╗      █████╗ ██████╗ ██╗  ██╗
+  ██╔════╝██╔══██╗██║     ██╔══██╗██╔══██╗██║  ██║
+  ██║     ███████║██║     ███████║██████╔╝███████║
+  ██║     ██╔══██║██║     ██╔══██║██╔═══╝ ██╔══██║
+  ╚██████╗██║  ██║███████╗██║  ██║██║     ██║  ██║
+   ╚═════╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝  ╚═╝
+
+EOF
+    printf "${RESET}"
+
+    printf "${MAGENTA}"
+    cat <<'EOF'
+        . , . , . , . , . , . , . , . , . , . , .
+      .                                               .
+    ,        UNIVERSAL SYMBOLIC LANGUAGE SYSTEM         ,
+      .                                               .
+        . , . , . , . , . , . , . , . , . , . , .
+
+EOF
+    printf "${RESET}"
+}
+
+# ============================================================
+# MAIN MENU
+# ============================================================
+
+main_menu() {
+    clear_screen
+    print_logo
+
+    printf "${BLUE}${BOLD}"
+    cat <<'EOF'
+╔══════════════════════════════════════════════════════════════╗
+║                    CALAPH TRANSLATOR                         ║
+╠══════════════════════════════════════════════════════════════╣
+║                                                              ║
+║   [1]  Encode text to Calaph                                ║
+║   [2]  Decode Calaph                                         ║
+║                                                              ║
+║   [3]  Decode Binary                                         ║
+║   [4]  Decode Morse                                          ║
+║   [5]  Decode Hexadecimal                                    ║
+║                                                              ║
+║   [6]  Encode text to Binary                                 ║
+║   [7]  Encode text to Morse                                  ║
+║   [8]  Encode text to Hexadecimal                            ║
+║                                                              ║
+║   [0]  Exit                                                  ║
+║                                                              ║
+╚══════════════════════════════════════════════════════════════╝
+EOF
+    printf "${RESET}"
+
+    echo
+    printf "${CYAN}Select an option: ${RESET}"
+}
+
+# ============================================================
+# CALAPH ATOMS
+# ============================================================
+
+declare -A CALAPH_ATOM_VALUE=(
+    ["."]=1
+    [","]=3
+    ["<>"]=0
+)
+
+declare -A CALAPH_PRIMITIVE=(
+    [1]="."
+    [2]=".,"
+    [3]=","
+    [4]=",."
+    [5]=".,,"
+    [6]=",,"
+    [7]=",,."
+    [8]=".,,,"
+    [9]=",,,"
+    [10]=",,.,"
+)
+
+# Correct canonical representation of 10
+CALAPH_PRIMITIVE[10]=",,,."
+
+# ============================================================
+# LETTER TABLE
+# ============================================================
+
+declare -A LATIN_VALUE=(
+    [A]=1 [B]=2 [C]=3 [D]=4 [E]=5 [F]=6 [G]=7
+    [H]=8 [I]=9 [J]=10 [K]=11 [L]=12 [M]=13
+    [N]=14 [Ñ]=15 [O]=16 [P]=17 [Q]=18 [R]=19
+    [S]=20 [T]=21 [U]=22 [V]=23 [W]=24 [X]=25
+    [Y]=26 [Z]=27
+)
+
+declare -A GREEK_VALUE=(
+    [Α]=28 [Β]=29 [Γ]=30 [Δ]=31 [Ε]=32 [Ζ]=33
+    [Η]=34 [Θ]=35 [Ι]=36 [Κ]=37 [Λ]=38 [Μ]=39
+    [Ν]=40 [Ξ]=41 [Ο]=42 [Π]=43 [Ρ]=44 [Σ]=45
+    [Τ]=46 [Υ]=47 [Φ]=48 [Χ]=49 [Ψ]=50 [Ω]=51
+)
+
+declare -A CYRILLIC_VALUE=(
+    [А]=52 [Б]=53 [В]=54 [Г]=55 [Д]=56 [Е]=57
+    [Ё]=58 [Ж]=59 [З]=60 [И]=61 [Й]=62 [К]=63
+    [Л]=64 [М]=65 [Н]=66 [О]=67 [П]=68 [Р]=69
+    [С]=70 [Т]=71 [У]=72 [Ф]=73 [Х]=74 [Ц]=75
+    [Ч]=76 [Ш]=77 [Щ]=78 [Ъ]=79 [Ы]=80 [Ь]=81
+    [Э]=82 [Ю]=83 [Я]=84
+)
+
+# ============================================================
+# UNIFIED LETTER LOOKUP
+# ============================================================
+
+letter_number() {
+    local char="$1"
+    local upper
+
+    upper="${char^^}"
+
+    if [[ -n "${LATIN_VALUE[$upper]+x}" ]]; then
+        echo "${LATIN_VALUE[$upper]}"
+        return
+    fi
+
+    if [[ -n "${GREEK_VALUE[$upper]+x}" ]]; then
+        echo "${GREEK_VALUE[$upper]}"
+        return
+    fi
+
+    if [[ -n "${CYRILLIC_VALUE[$upper]+x}" ]]; then
+        echo "${CYRILLIC_VALUE[$upper]}"
+        return
+    fi
+
+    echo "0"
+}
+
+# ============================================================
+# NUMBER ENCODING
+# ============================================================
+
+encode_number() {
+    local number="$1"
+
+    if (( number < 0 )); then
+        printf -- "-%s" "$(encode_number "${number#-}")"
+        return
+    fi
+
+    if (( number == 0 )); then
+        printf "<>"
+        return
+    fi
+
+    if (( number <= 10 )); then
+        printf "%s" "${CALAPH_PRIMITIVE[$number]}"
+        return
+    fi
+
+    # Explicit compact forms
+    case "$number" in
+        12) printf ".,.,.,.,"
+            return ;;
+        15) printf ".,,,"
+            return ;;
+        18) printf ",'',"
+            return ;;
+        20) printf ".,,,'."
+            return ;;
+        21) printf ".,,,',"
+            return ;;
+        30) printf ",',,,,."
+            return ;;
+        40) printf ",,,.'."
+            return ;;
+        50) printf ".,',,.,"
+            return ;;
+    esac
+
+    # Prefer multiplication when possible.
+    local a b
+    for ((a=10; a>=2; a--)); do
+        if (( number % a == 0 )); then
+            b=$((number / a))
+
+            if (( b >= 1 )); then
+                printf "%s'%s" "$(encode_number "$a")" "$(encode_number "$b")"
+                return
+            fi
+        fi
+    done
+
+    # Otherwise decompose into tens and remainder.
+    local tens=$((number / 10))
+    local remainder=$((number % 10))
+
+    if (( tens > 0 && remainder > 0 )); then
+        printf "%s %s" "$(encode_number $((tens * 10)))" "$(encode_number "$remainder")"
+        return
+    fi
+
+    if (( tens > 0 )); then
+        printf "%s" "$(encode_number $((tens * 10)))"
+        return
+    fi
+
+    printf "%s" "$(encode_number "$remainder")"
+}
+
+# ============================================================
+# CALAPH NUMBER DECODER
+# ============================================================
+
+atom_value() {
+    case "$1" in
+        ".") echo 1 ;;
+        ",") echo 3 ;;
+        "<>") echo 0 ;;
+        *) echo 0 ;;
+    esac
+}
+
+decode_simple_expression() {
+    local expr="$1"
+    local total=0
+    local i=0
+    local length=${#expr}
+    local char
+    local value
+
+    while (( i < length )); do
+        if [[ "${expr:i:2}" == "<>" ]]; then
+            (( i += 2 ))
+            continue
+        fi
+
+        char="${expr:i:1}"
+
+        if [[ "$char" == "." || "$char" == "," ]]; then
+            value=$(atom_value "$char")
+            (( total += value ))
+        fi
+
+        (( i++ ))
+    done
+
+    echo "$total"
+}
+
+decode_number_term() {
+    local term="$1"
+
+    if [[ "$term" == *"'"* ]]; then
+        local left="${term%%\'*}"
+        local right="${term#*\'}"
+
+        if [[ "$right" == *"'"* ]]; then
+            echo "0"
+            return
+        fi
+
+        local left_value
+        local right_value
+
+        left_value=$(decode_simple_expression "$left")
+        right_value=$(decode_simple_expression "$right")
+
+        echo $((left_value * right_value))
+    else
+        decode_simple_expression "$term"
+    fi
+}
+
+decode_number() {
+    local expression="$1"
+    local total=0
+    local term
+    local remaining="$expression"
+
+    while [[ "$remaining" == *" "* ]]; do
+        term="${remaining%% *}"
+        remaining="${remaining#* }"
+
+        if [[ -n "$term" ]]; then
+            total=$((total + $(decode_number_term "$term")))
+        fi
+    done
+
+    if [[ -n "$remaining" ]]; then
+        total=$((total + $(decode_number_term "$remaining")))
+    fi
+
+    echo "$total"
+}
+
+# ============================================================
+# NUMBER -> LETTER
+# ============================================================
+
+number_to_letter() {
+    local number="$1"
+    local key
+
+    for key in "${!LATIN_VALUE[@]}"; do
+        if (( LATIN_VALUE[$key] == number )); then
+            echo "$key"
+            return
+        fi
+    done
+
+    for key in "${!GREEK_VALUE[@]}"; do
+        if (( GREEK_VALUE[$key] == number )); then
+            echo "$key"
+            return
+        fi
+    done
+
+    for key in "${!CYRILLIC_VALUE[@]}"; do
+        if (( CYRILLIC_VALUE[$key] == number )); then
+            echo "$key"
+            return
+        fi
+    done
+
+    echo "?"
+}
+
+# ============================================================
+# LETTER ENCODING
+# ============================================================
+
+encode_letter() {
+    local char="$1"
+    local number
+
+    number=$(letter_number "$char")
+
+    if (( number == 0 )); then
+        printf "%s" "$char"
+        return
+    fi
+
+    printf ":%s" "$(encode_number "$number")"
+}
+
+# ============================================================
+# TEXT -> CALAPH
+# ============================================================
+
+encode_text() {
+    local text="$1"
+    local result=""
+    local char
+    local i
+    local len=${#text}
+
+    for ((i=0; i<len; i++)); do
+        char="${text:i:1}"
+
+        case "$char" in
+            " ")
+                result+=" // "
+                ;;
+            *)
+                if [[ "$char" =~ [[:alpha:]] ]]; then
+                    result+="$(encode_letter "$char")/"
+                else
+                    result+="$char/"
+                fi
+                ;;
+        esac
+    done
+
+    result="${result%/}"
+    result="${result//\/ \/ /\/\//}"
+
+    printf "%s" "$result"
+}
+
+# ============================================================
+# CALAPH LETTER DECODER
+# ============================================================
+
+decode_letter() {
+    local token="$1"
+
+    if [[ "$token" != :* ]]; then
+        printf "%s" "$token"
+        return
+    fi
+
+    local expression="${token#:}"
+    local number
+
+    number=$(decode_number "$expression")
+
+    number_to_letter "$number"
+}
+
+# ============================================================
+# CALAPH -> TEXT
+# ============================================================
+
+decode_calaph() {
+    local input="$1"
+    local result=""
+    local token
+    local current=""
+    local i
+    local len=${#input}
+
+    for ((i=0; i<len; i++)); do
+
+        if [[ "${input:i:2}" == "//" ]]; then
+            if [[ -n "$current" ]]; then
+                result+="$(decode_letter "$current")"
+                current=""
+            fi
+
+            result+=" "
+            ((i++))
+            continue
+        fi
+
+        if [[ "${input:i:1}" == "/" ]]; then
+            if [[ -n "$current" ]]; then
+                result+="$(decode_letter "$current")"
+                current=""
+            fi
+            continue
+        fi
+
+        current+="${input:i:1}"
+    done
+
+    if [[ -n "$current" ]]; then
+        result+="$(decode_letter "$current")"
+    fi
+
+    printf "%s" "$result"
+}
+
+# ============================================================
+# BINARY
+# ============================================================
+
+binary_to_text() {
+    local input="$1"
+    local clean
+    local byte
+    local result=""
+
+    clean="${input//[[:space:]]/}"
+
+    if (( ${#clean} % 8 != 0 )); then
+        printf "${RED}Invalid binary length.${RESET}\n"
+        return 1
+    fi
+
+    while [[ -n "$clean" ]]; do
+        byte="${clean:0:8}"
+        clean="${clean:8}"
+
+        if [[ ! "$byte" =~ ^[01]{8}$ ]]; then
+            printf "${RED}Invalid binary sequence.${RESET}\n"
+            return 1
+        fi
+
+        printf -v char "\\$(printf '%03o' "$((2#$byte))")"
+        result+="$char"
+    done
+
+    printf "%s" "$result"
+}
+
+text_to_binary() {
+    local input="$1"
+    local result=""
+    local char
+    local i
+    local value
+
+    for ((i=0; i<${#input}; i++)); do
+        char="${input:i:1}"
+
+        LC_CTYPE=C printf -v value '%d' "'$char"
+
+        printf -v byte '%08d' "$(echo "obase=2; $value" | bc)"
+        result+="$byte "
+    done
+
+    printf "%s" "${result% }"
+}
+
+# ============================================================
+# HEXADECIMAL
+# ============================================================
+
+hex_to_text() {
+    local input="$1"
+    local clean
+    local byte
+    local result=""
+
+    clean="${input//[[:space:]]/}"
+
+    if (( ${#clean} % 2 != 0 )); then
+        printf "${RED}Invalid hexadecimal length.${RESET}\n"
+        return 1
+    fi
+
+    while [[ -n "$clean" ]]; do
+        byte="${clean:0:2}"
+        clean="${clean:2}"
+
+        if [[ ! "$byte" =~ ^[0-9A-Fa-f]{2}$ ]]; then
+            printf "${RED}Invalid hexadecimal sequence.${RESET}\n"
+            return 1
+        fi
+
+        printf -v char "\\$(printf '%03o' "$((16#$byte))")"
+        result+="$char"
+    done
+
+    printf "%s" "$result"
+}
+
+text_to_hex() {
+    local input="$1"
+    local result=""
+    local char
+    local i
+    local value
+
+    for ((i=0; i<${#input}; i++)); do
+        char="${input:i:1}"
+
+        LC_CTYPE=C printf -v value '%d' "'$char"
+        printf -v hex '%02X' "$value"
+
+        result+="$hex "
+    done
+
+    printf "%s" "${result% }"
+}
+
+# ============================================================
+# MORSE
+# ============================================================
+
+declare -A MORSE_CODE=(
+    [A]=".-"
+    [B]="-..."
+    [C]="-.-."
+    [D]="-.."
+    [E]="."
+    [F]="..-."
+    [G]="--."
+    [H]="...."
+    [I]=".."
+    [J]=".---"
+    [K]="-.-"
+    [L]=".-.."
+    [M]="--"
+    [N]="-."
+    [O]="---"
+    [P]=".--."
+    [Q]="--.-"
+    [R]=".-."
+    [S]="..."
+    [T]="-"
+    [U]="..-"
+    [V]="...-"
+    [W]=".--"
+    [X]="-..-"
+    [Y]="-.--"
+    [Z]="--.."
+
+    [0]="-----"
+    [1]=".----"
+    [2]="..---"
+    [3]="...--"
+    [4]="....-"
+    [5]="....."
+    [6]="-...."
+    [7]="--..."
+    [8]="---.."
+    [9]="----."
+
+    [Ñ]="--.--"
+
+    ["."]=".-.-.-"
+    [","]="--..--"
+    ["?"]="..--.."
+    ["!"]="-.-.--"
+    [";"]="---..."
+    [":"]="---..."
+    ["("]="-.--."
+    [")"]="-.--.-"
+    ["-"]="-....-"
+    ["'"]=".----."
+    ["/"]="-..-."
+    ["@"]=".--.-."
+)
+
+declare -A MORSE_REVERSE
+
+for key in "${!MORSE_CODE[@]}"; do
+    MORSE_REVERSE["${MORSE_CODE[$key]}"]="$key"
+done
+
+text_to_morse() {
+    local input="$1"
+    local result=""
+    local char
+    local upper
+    local i
+    local code
+
+    for ((i=0; i<${#input}; i++)); do
+        char="${input:i:1}"
+
+        if [[ "$char" == " " ]]; then
+            result+=" / "
+            continue
+        fi
+
+        upper="${char^^}"
+
+        if [[ -n "${MORSE_CODE[$upper]+x}" ]]; then
+            code="${MORSE_CODE[$upper]}"
+            result+="$code "
+        else
+            result+="$char "
+        fi
+    done
+
+    printf "%s" "${result% }"
+}
+
+morse_to_text() {
+    local input="$1"
+    local result=""
+    local token
+    local normalized
+
+    normalized="${input//\// / }"
+
+    read -ra tokens <<< "$normalized"
+
+    for token in "${tokens[@]}"; do
+        if [[ "$token" == "/" ]]; then
+            result+=" "
+        elif [[ -n "${MORSE_REVERSE[$token]+x}" ]]; then
+            result+="${MORSE_REVERSE[$token]}"
+        else
+            result+="?"
+        fi
+    done
+
+    printf "%s" "$result"
+}
+
+# ============================================================
+# INPUT HELPERS
+# ============================================================
+
+read_input() {
+    local prompt="$1"
+
+    printf "\n${YELLOW}%s${RESET}\n> " "$prompt"
+    IFS= read -r USER_INPUT
+}
+
+# ============================================================
+# ENCODE SCREEN
+# ============================================================
+
+encode_screen() {
+    clear_screen
+
+    printf "${CYAN}${BOLD}"
+    cat <<'EOF'
+
+╔══════════════════════════════════════════════════════════════╗
+║                    CALAPH ENCODER                            ║
+╚══════════════════════════════════════════════════════════════╝
+
+EOF
+    printf "${RESET}"
+
+    read_input "Enter text to encode"
+
+    if [[ -z "$USER_INPUT" ]]; then
+        printf "${RED}No input provided.${RESET}\n"
+        pause_console
+        return
+    fi
+
+    printf "\n${GREEN}${BOLD}CALAPH:${RESET}\n"
+    printf "${WHITE}%s${RESET}\n" "$(encode_text "$USER_INPUT")"
+
+    pause_console
+}
+
+# ============================================================
+# CALAPH DECODE SCREEN
+# ============================================================
+
+calaph_decode_screen() {
+    clear_screen
+
+    printf "${MAGENTA}${BOLD}"
+    cat <<'EOF'
+
+╔══════════════════════════════════════════════════════════════╗
+║                     CALAPH DECODER                           ║
+╚══════════════════════════════════════════════════════════════╝
+
+EOF
+    printf "${RESET}"
+
+    read_input "Enter Calaph text"
+
+    if [[ -z "$USER_INPUT" ]]; then
+        printf "${RED}No input provided.${RESET}\n"
+        pause_console
+        return
+    fi
+
+    printf "\n${GREEN}${BOLD}TEXT:${RESET}\n"
+    printf "${WHITE}%s${RESET}\n" "$(decode_calaph "$USER_INPUT")"
+
+    pause_console
+}
+
+# ============================================================
+# BINARY SCREEN
+# ============================================================
+
+binary_decode_screen() {
+    clear_screen
+
+    printf "${BLUE}${BOLD}"
+    cat <<'EOF'
+
+╔══════════════════════════════════════════════════════════════╗
+║                    BINARY DECODER                            ║
+╚══════════════════════════════════════════════════════════════╝
+
+EOF
+    printf "${RESET}"
+
+    read_input "Enter binary"
+
+    printf "\n${GREEN}${BOLD}TEXT:${RESET}\n"
+
+    if ! binary_to_text "$USER_INPUT"; then
+        :
+    fi
+
+    echo
+    pause_console
+}
+
+binary_encode_screen() {
+    clear_screen
+
+    printf "${BLUE}${BOLD}"
+    cat <<'EOF'
+
+╔══════════════════════════════════════════════════════════════╗
+║                    BINARY ENCODER                            ║
+╚══════════════════════════════════════════════════════════════╝
+
+EOF
+    printf "${RESET}"
+
+    read_input "Enter text"
+
+    printf "\n${GREEN}${BOLD}BINARY:${RESET}\n"
+    text_to_binary "$USER_INPUT"
+    echo
+
+    pause_console
+}
+
+# ============================================================
+# MORSE SCREEN
+# ============================================================
+
+morse_decode_screen() {
+    clear_screen
+
+    printf "${YELLOW}${BOLD}"
+    cat <<'EOF'
+
+╔══════════════════════════════════════════════════════════════╗
+║                     MORSE DECODER                            ║
+╚══════════════════════════════════════════════════════════════╝
+
+EOF
+    printf "${RESET}"
+
+    printf "${DIM}Use spaces between letters and / between words.${RESET}\n"
+    printf "${DIM}Example: .... . .-.. .-.. --- / .-- --- .-. .-.. -..${RESET}\n"
+
+    read_input "Enter Morse code"
+
+    printf "\n${GREEN}${BOLD}TEXT:${RESET}\n"
+    morse_to_text "$USER_INPUT"
+    echo
+
+    pause_console
+}
+
+morse_encode_screen() {
+    clear_screen
+
+    printf "${YELLOW}${BOLD}"
+    cat <<'EOF'
+
+╔══════════════════════════════════════════════════════════════╗
+║                     MORSE ENCODER                            ║
+╚══════════════════════════════════════════════════════════════╝
+
+EOF
+    printf "${RESET}"
+
+    read_input "Enter text"
+
+    printf "\n${GREEN}${BOLD}MORSE:${RESET}\n"
+    text_to_morse "$USER_INPUT"
+    echo
+
+    pause_console
+}
+
+# ============================================================
+# HEX SCREEN
+# ============================================================
+
+hex_decode_screen() {
+    clear_screen
+
+    printf "${CYAN}${BOLD}"
+    cat <<'EOF'
+
+╔══════════════════════════════════════════════════════════════╗
+║                  HEXADECIMAL DECODER                         ║
+╚══════════════════════════════════════════════════════════════╝
+
+EOF
+    printf "${RESET}"
+
+    read_input "Enter hexadecimal"
+
+    printf "\n${GREEN}${BOLD}TEXT:${RESET}\n"
+    hex_to_text "$USER_INPUT"
+    echo
+
+    pause_console
+}
+
+hex_encode_screen() {
+    clear_screen
+
+    printf "${CYAN}${BOLD}"
+    cat <<'EOF'
+
+╔══════════════════════════════════════════════════════════════╗
+║                  HEXADECIMAL ENCODER                         ║
+╚══════════════════════════════════════════════════════════════╝
+
+EOF
+    printf "${RESET}"
+
+    read_input "Enter text"
+
+    printf "\n${GREEN}${BOLD}HEX:${RESET}\n"
+    text_to_hex "$USER_INPUT"
+    echo
+
+    pause_console
+}
+
+# ============================================================
+# STARTUP
+# ============================================================
+
+trap 'printf "\033[0m"; clear' EXIT
+
+while true; do
+
+    main_menu
+    read -r OPTION
+
+    case "$OPTION" in
+
+        1)
+            encode_screen
+            ;;
+
+        2)
+            calaph_decode_screen
+            ;;
+
+        3)
+            binary_decode_screen
+            ;;
+
+        4)
+            morse_decode_screen
+            ;;
+
+        5)
+            hex_decode_screen
+            ;;
+
+        6)
+            binary_encode_screen
+            ;;
+
+        7)
+            morse_encode_screen
+            ;;
+
+        8)
+            hex_encode_screen
+            ;;
+
+        0)
+            clear_screen
+            printf "${CYAN}${BOLD}"
+            cat <<'EOF'
+
+   ██████╗ █████╗ ██╗      █████╗ ██████╗ ██╗  ██╗
+  ██╔════╝██╔══██╗██║     ██╔══██╗██╔══██╗██║  ██║
+  ██║     ███████║██║     ███████║██████╔╝███████║
+  ██║     ██╔══██║██║     ██╔══██║██╔═══╝ ██╔══██║
+  ╚██████╗██║  ██║███████╗██║  ██║██║     ██║  ██║
+   ╚═════╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝  ╚═╝
+
+EOF
+            printf "${RESET}"
+            printf "${GREEN}Calaph session terminated.${RESET}\n\n"
+            exit 0
+            ;;
+
+        *)
+            printf "\n${RED}Invalid option.${RESET}\n"
+            sleep 1
+            ;;
+
+    esac
+done
