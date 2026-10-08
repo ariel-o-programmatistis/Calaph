@@ -4,6 +4,8 @@
 #include <ctype.h>
 #include <locale.h>
 #include <wchar.h>
+#include <wctype.h>
+#include <limits.h>
 #include <unistd.h>
 
 /* ============================================================
