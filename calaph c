@@ -6,261 +6,305 @@
 #include <wchar.h>
 #include <wctype.h>
 #include <limits.h>
+#include <unistd.h>
 
 /* ============================================================
-                            CALAPH
-              SYMBOLIC CONVERSION SYSTEM
+   CALAPH
+   Numerical Language System
    ============================================================ */
 
-/*
-    Supported conversions:
+/* -------------------- ANSI COLORS -------------------- */
 
-        Calaph <-> Morse
-        Calaph <-> Hexadecimal
-        Calaph <-> Binary
+#define RESET       "\033[0m"
+#define BOLD        "\033[1m"
+#define DIM         "\033[2m"
 
-    Calaph numerical primitives:
+#define BLACK       "\033[30m"
+#define RED         "\033[31m"
+#define GREEN       "\033[32m"
+#define YELLOW      "\033[33m"
+#define BLUE        "\033[34m"
+#define MAGENTA     "\033[35m"
+#define CYAN        "\033[36m"
+#define WHITE       "\033[37m"
 
-        .      = 1
-        ,      = 3
-        <>     = 0
-
-    Arithmetic:
-
-        '      = multiplication
-        space  = addition
-
-    Decimal notation:
-
-        |      = decimal separator
-        \      = separator between decimal digits
-
-    Examples:
-
-        .       = 1
-        ,.      = 4
-        ,',     = 9
-        .,,     = 5
-        .,',,.  = 50
-
-        ,|.\,.  = 3.14
-        <>      = 0
-*/
+#define BG_BLACK    "\033[40m"
+#define BG_BLUE     "\033[44m"
+#define BG_CYAN     "\033[46m"
+#define BG_MAGENTA  "\033[45m"
 
 /* ============================================================
-                         TERMINAL COLORS
+   TERMINAL UTILITIES
    ============================================================ */
 
-#define RESET   "\033[0m"
-#define BOLD    "\033[1m"
-#define DIM     "\033[2m"
-#define CYAN    "\033[36m"
-#define BLUE    "\033[34m"
-#define MAGENTA "\033[35m"
-#define WHITE   "\033[37m"
-#define GREEN   "\033[32m"
-#define YELLOW  "\033[33m"
-#define RED     "\033[31m"
-
-/* ============================================================
-                         GENERAL UTILITIES
-   ============================================================ */
-
-static void clear_screen(void)
-{
+void clear_screen(void) {
     printf("\033[2J\033[H");
 }
 
-static void pause_program(void)
-{
-    printf("\n%sPress ENTER to continue...%s", DIM, RESET);
+void move_cursor_home(void) {
+    printf("\033[H");
+}
+
+void pause_screen(void) {
+    printf("\n");
+    printf(DIM "  Press ENTER to continue..." RESET);
     getchar();
 }
 
-static void trim_newline(char *str)
-{
-    size_t len = strlen(str);
-
-    while (len > 0 &&
-           (str[len - 1] == '\n' ||
-            str[len - 1] == '\r')) {
-        str[len - 1] = '\0';
-        len--;
-    }
+void line(void) {
+    printf(CYAN
+           "  ──────────────────────────────────────────────────────────"
+           RESET "\n");
 }
 
-static void remove_spaces(char *str)
-{
-    char *src = str;
-    char *dst = str;
-
-    while (*src) {
-        if (!isspace((unsigned char)*src))
-            *dst++ = *src;
-
-        src++;
-    }
-
-    *dst = '\0';
+void double_line(void) {
+    printf(CYAN
+           "  ══════════════════════════════════════════════════════════"
+           RESET "\n");
 }
 
-static int is_binary_string(const char *str)
-{
-    if (*str == '\0')
-        return 0;
-
-    while (*str) {
-        if (*str != '0' && *str != '1')
-            return 0;
-        str++;
-    }
-
-    return 1;
+void top_border(void) {
+    printf(CYAN
+           "  ╔══════════════════════════════════════════════════════════╗\n"
+           RESET);
 }
 
-static int hex_value(char c)
-{
-    if (c >= '0' && c <= '9')
-        return c - '0';
+void middle_border(void) {
+    printf(CYAN
+           "  ╠══════════════════════════════════════════════════════════╣\n"
+           RESET);
+}
 
-    if (c >= 'A' && c <= 'F')
-        return c - 'A' + 10;
-
-    if (c >= 'a' && c <= 'f')
-        return c - 'a' + 10;
-
-    return -1;
+void bottom_border(void) {
+    printf(CYAN
+           "  ╚══════════════════════════════════════════════════════════╝\n"
+           RESET);
 }
 
 /* ============================================================
-                       CALAPH NUMBER SYSTEM
+   LOGO
    ============================================================ */
 
-/*
-    Primitive values:
+void logo(void) {
+    printf(CYAN BOLD);
 
-        .       1
-        ,       3
-        <>      0
+    printf("   ██████╗ █████╗ ██╗      █████╗ ██████╗ ██╗  ██╗\n");
+    printf("  ██╔════╝██╔══██╗██║     ██╔══██╗██╔══██╗██║  ██║\n");
+    printf("  ██║     ███████║██║     ███████║██████╔╝███████║\n");
+    printf("  ██║     ██╔══██║██║     ██╔══██║██╔═══╝ ██╔══██║\n");
+    printf("  ╚██████╗██║  ██║███████╗██║  ██║██║     ██║  ██║\n");
+    printf("   ╚═════╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝  ╚═╝\n");
 
-    A sequence of primitives without operators is interpreted
-    according to the canonical Calaph representation.
+    printf(RESET);
 
-    Addition is represented by spaces.
+    printf(DIM
+           "                 NUMERICAL LANGUAGE SYSTEM\n"
+           "                            v1.0\n"
+           RESET);
+}
 
-    Multiplication is represented by '.
+/* ============================================================
+   HEADER
+   ============================================================ */
 
-    The parser below evaluates a Calaph expression.
-*/
+void header(const char *section, const char *operation) {
+    clear_screen();
 
-/* ------------------------------------------------------------
-                       Primitive parser
-   ------------------------------------------------------------ */
+    printf("\n");
 
-static long long parse_primitive(const char *str)
-{
-    long long value = 0;
-    size_t i = 0;
-    size_t len = strlen(str);
+    top_border();
 
-    if (strcmp(str, "<>") == 0)
+    printf(CYAN "  ║" RESET
+           BOLD "  CALAPH" RESET
+           DIM " / " RESET
+           MAGENTA "%s" RESET
+           DIM " / " RESET
+           WHITE "%s" RESET
+           "\n",
+           section,
+           operation);
+
+    middle_border();
+
+    printf(CYAN "  ║" RESET
+           "  " DIM "Numerical Language System" RESET "\n");
+
+    bottom_border();
+
+    printf("\n");
+}
+
+/* ============================================================
+   MAIN LOGO SCREEN
+   ============================================================ */
+
+void main_header(void) {
+    clear_screen();
+
+    printf("\n");
+
+    top_border();
+
+    printf(CYAN "  ║" RESET
+           "                                                          "
+           CYAN "║\n" RESET);
+
+    printf(CYAN "  ║" RESET
+           "                     " BOLD CYAN "C A L A P H" RESET
+           "                        "
+           CYAN "║\n" RESET);
+
+    printf(CYAN "  ║" RESET
+           "                                                          "
+           CYAN "║\n" RESET);
+
+    middle_border();
+
+    printf(CYAN "  ║" RESET
+           "              " DIM "NUMERICAL LANGUAGE SYSTEM" RESET
+           "                 "
+           CYAN "║\n" RESET);
+
+    printf(CYAN "  ║" RESET
+           "                         " DIM "v1.0" RESET
+           "                         "
+           CYAN "║\n" RESET);
+
+    middle_border();
+
+    printf(CYAN "  ║" RESET
+           "                                                          "
+           CYAN "║\n" RESET);
+
+    printf(CYAN "  ║" RESET
+           "   " DIM "A language based on numerical structure and symbols."
+           RESET "  "
+           CYAN "║\n" RESET);
+
+    printf(CYAN "  ║" RESET
+           "                                                          "
+           CYAN "║\n" RESET);
+
+    bottom_border();
+
+    printf("\n");
+}
+
+/* ============================================================
+   CALAPH PRIMITIVES
+   ============================================================ */
+
+const char *primitive_for_number(int n) {
+
+    switch (n) {
+
+        case 0:
+            return "<>";
+
+        case 1:
+            return ".";
+
+        case 2:
+            return ".,";
+
+        case 3:
+            return ",";
+
+        case 4:
+            return ",.";
+
+        case 5:
+            return ".,,";
+
+        case 6:
+            return ",,";
+
+        case 7:
+            return ",,.";
+
+        case 8:
+            return ".,,,";
+
+        case 9:
+            return ",,,";
+
+        case 10:
+            return ",,,.";
+
+        default:
+            return NULL;
+    }
+}
+
+/* ============================================================
+   CALAPH PARSER
+   ============================================================ */
+
+int parse_primitive(const char *s) {
+
+    if (strcmp(s, "<>") == 0)
         return 0;
 
-    /*
-        A primitive block is interpreted by summing its
-        individual . and , symbols.
+    int value = 0;
 
-        . = 1
-        , = 3
-    */
+    for (size_t i = 0; s[i] != '\0'; i++) {
 
-    while (i < len) {
-        if (str[i] == '.') {
+        if (s[i] == '.')
             value += 1;
-            i++;
-        }
-        else if (str[i] == ',') {
+
+        else if (s[i] == ',')
             value += 3;
-            i++;
-        }
-        else {
+
+        else
             return -1;
-        }
     }
 
     return value;
 }
 
-/* ------------------------------------------------------------
-                      Multiplication parser
-   ------------------------------------------------------------ */
+int parse_product(const char *s) {
 
-static long long parse_product(const char *str)
-{
-    char left[256];
-    char right[256];
+    char buffer[1024];
 
-    const char *apostrophe = strchr(str, '\'');
+    strncpy(buffer, s, sizeof(buffer) - 1);
+    buffer[sizeof(buffer) - 1] = '\0';
 
-    if (!apostrophe) {
-        return parse_primitive(str);
-    }
+    char *apostrophe = strchr(buffer, '\'');
 
-    /*
-        Calaph multiplication is binary:
+    if (!apostrophe)
+        return parse_primitive(buffer);
 
-            A'B
-
-        More than one apostrophe is invalid.
-    */
-
-    if (strchr(apostrophe + 1, '\'') != NULL)
+    if (strchr(apostrophe + 1, '\''))
         return -1;
 
-    size_t left_len = (size_t)(apostrophe - str);
+    *apostrophe = '\0';
 
-    if (left_len == 0 ||
-        strlen(apostrophe + 1) == 0)
+    if (buffer[0] == '\0' || apostrophe[1] == '\0')
         return -1;
 
-    if (left_len >= sizeof(left) ||
-        strlen(apostrophe + 1) >= sizeof(right))
+    int left = parse_primitive(buffer);
+    int right = parse_primitive(apostrophe + 1);
+
+    if (left < 0 || right < 0)
         return -1;
 
-    memcpy(left, str, left_len);
-    left[left_len] = '\0';
-
-    strcpy(right, apostrophe + 1);
-
-    long long a = parse_primitive(left);
-    long long b = parse_primitive(right);
-
-    if (a < 0 || b < 0)
-        return -1;
-
-    return a * b;
+    return left * right;
 }
 
-/* ------------------------------------------------------------
-                       Full expression parser
-   ------------------------------------------------------------ */
+int evaluate_calaph(const char *expression) {
 
-static long long evaluate_calaph(const char *input)
-{
-    char buffer[2048];
-    char *token;
+    char buffer[4096];
 
-    if (strlen(input) >= sizeof(buffer))
-        return -1;
+    strncpy(buffer, expression, sizeof(buffer) - 1);
+    buffer[sizeof(buffer) - 1] = '\0';
 
-    strcpy(buffer, input);
+    int total = 0;
 
-    long long total = 0;
-
-    token = strtok(buffer, " ");
+    char *token = strtok(buffer, " ");
 
     while (token != NULL) {
-        long long value = parse_product(token);
+
+        int value = parse_product(token);
 
         if (value < 0)
             return -1;
@@ -274,937 +318,1256 @@ static long long evaluate_calaph(const char *input)
 }
 
 /* ============================================================
-                   INTEGER -> CALAPH ENCODING
+   INTEGER -> CALAPH
    ============================================================ */
 
-/*
-    Canonical representation is generated using the following
-    decomposition:
-
-        0 = <>
-        1 = .
-        2 = .,
-        3 = ,
-        4 = ,.
-        5 = .,,
-        6 = ,,
-        7 = ,,.
-        8 = .,,,
-        9 = ,,,
-        10 = ,,,.
-
-    Larger values are composed through multiplication and
-    addition.
-
-    Special canonical representation:
-
-        50 = .,',,.
-*/
-
-static void append_text(char *dest, size_t size, const char *src)
-{
-    if (strlen(dest) + strlen(src) + 1 < size)
-        strcat(dest, src);
-}
-
-/* ------------------------------------------------------------
-                     Primitive encoder 1-10
-   ------------------------------------------------------------ */
-
-static const char *primitive_for_number(int n)
-{
-    static const char *table[] = {
-        "<>",
-        ".",
-        ".,",
-        ",",
-        ",.",
-        ".,,",
-        ",,",
-        ",,.",
-        ".,,,",
-        ",,,",
-        ",,,."
-    };
-
-    if (n >= 0 && n <= 10)
-        return table[n];
-
-    return NULL;
-}
-
-/* ------------------------------------------------------------
-                       Integer encoder
-   ------------------------------------------------------------ */
-
-static void encode_integer(long long value,
-                           char *output,
-                           size_t output_size)
-{
-    output[0] = '\0';
+void encode_integer(int value, char *output, size_t size) {
 
     if (value == 0) {
-        strcpy(output, "<>");
+        snprintf(output, size, "<>");
         return;
     }
 
-    /*
-        Direct primitive representation for 1-10.
-    */
-
-    if (value <= 10) {
-        strcpy(output, primitive_for_number((int)value));
-        return;
-    }
+    output[0] = '\0';
 
     /*
-        Explicit preferred representation for 50.
+       50 is represented using the preferred Calaph form:
+
+       .,',,. = 50
     */
 
-    if (value == 50) {
-        strcpy(output, ".,',,.");
-        return;
-    }
+    while (value >= 50) {
 
-    /*
-        Multiplication by 10 when useful.
-    */
+        if (value >= 100) {
 
-    if (value >= 20 && value % 10 == 0) {
-        long long multiplier = value / 10;
+            int hundreds = value / 100;
 
-        if (multiplier <= 10) {
-            snprintf(output,
-                     output_size,
-                     "%s'%s",
-                     primitive_for_number((int)multiplier),
-                     primitive_for_number(10));
-            return;
+            if (output[0] != '\0')
+                strncat(output, " ",
+                        size - strlen(output) - 1);
+
+            /*
+               100 = ,,,.' ,,,.
+            */
+
+            if (hundreds == 1) {
+
+                strncat(output, ",,,.'", size - strlen(output) - 1);
+                strncat(output, ",,,.", size - strlen(output) - 1);
+
+            } else {
+
+                char left[256];
+
+                encode_integer(hundreds, left, sizeof(left));
+
+                strncat(output, left,
+                        size - strlen(output) - 1);
+
+                strncat(output, "'",
+                        size - strlen(output) - 1);
+
+                strncat(output, ",,,.",
+                        size - strlen(output) - 1);
+            }
+
+            value -= hundreds * 100;
+
+        } else {
+
+            if (output[0] != '\0')
+                strncat(output, " ",
+                        size - strlen(output) - 1);
+
+            strncat(output, ".,',,.",
+                    size - strlen(output) - 1);
+
+            value -= 50;
         }
     }
 
-    /*
-        Multiplication by 3 when useful.
-    */
+    if (value > 0) {
 
-    if (value >= 12 && value % 3 == 0) {
-        long long multiplier = value / 3;
+        if (output[0] != '\0')
+            strncat(output, " ",
+                    size - strlen(output) - 1);
 
-        if (multiplier <= 10) {
-            snprintf(output,
-                     output_size,
-                     "%s'%s",
-                     primitive_for_number((int)multiplier),
-                     primitive_for_number(3));
-            return;
+        if (value <= 10) {
+
+            const char *p = primitive_for_number(value);
+
+            if (p)
+                strncat(output, p,
+                        size - strlen(output) - 1);
+
+        } else {
+
+            int threes = value / 3;
+            int remainder = value % 3;
+
+            for (int i = 0; i < threes; i++) {
+
+                strncat(output, ",",
+                        size - strlen(output) - 1);
+            }
+
+            if (remainder == 1) {
+
+                strncat(output, ".",
+                        size - strlen(output) - 1);
+
+            } else if (remainder == 2) {
+
+                strncat(output, ".,",
+                        size - strlen(output) - 1);
+            }
         }
-    }
-
-    /*
-        Fallback: represent the number as a sum of 3s and 1s.
-
-        This guarantees that every positive integer can be
-        represented.
-    */
-
-    long long remaining = value;
-    int first = 1;
-
-    while (remaining >= 3) {
-        if (!first)
-            append_text(output, output_size, " ");
-
-        append_text(output, output_size, ",");
-        remaining -= 3;
-        first = 0;
-    }
-
-    if (remaining == 1) {
-        if (!first)
-            append_text(output, output_size, " ");
-
-        append_text(output, output_size, ".");
     }
 }
 
 /* ============================================================
-                       DECIMAL SUPPORT
+   TEXT CHARACTER MAPPING
    ============================================================ */
 
-/*
-    Calaph decimal:
+int character_to_number(wchar_t c) {
 
-        integer | digit\digit\digit
-
-    Example:
-
-        3.14
-
-        ,|.\,.
-
-    The decimal digits themselves are represented using the
-    normal Calaph digit representations.
-*/
-
-static void encode_decimal(double value,
-                           char *output,
-                           size_t output_size)
-{
-    char integer_part[2048];
-
-    long long integer = (long long)value;
-
-    double fraction = value - (double)integer;
-
-    encode_integer(integer, integer_part, sizeof(integer_part));
-
-    snprintf(output,
-             output_size,
-             "%s|",
-             integer_part);
+    c = towupper(c);
 
     /*
-        Encode up to 12 fractional digits.
+       Latin alphabet with Ñ.
+       A-Z occupy 1-14, Ñ=15, O-Z=16-27.
     */
 
-    for (int i = 0; i < 12; i++) {
-        fraction *= 10.0;
+    if (c >= L'A' && c <= L'N')
+        return (int)(c - L'A') + 1;
 
-        int digit = (int)fraction;
+    if (c == L'Ñ')
+        return 15;
 
-        fraction -= digit;
+    if (c >= L'O' && c <= L'Z')
+        return (int)(c - L'O') + 16;
 
-        if (i > 0)
-            append_text(output, output_size, "\\");
+    /*
+       Greek
+    */
 
-        char digit_code[64];
+    const wchar_t greek[] = {
+        L'Α', L'Β', L'Γ', L'Δ', L'Ε', L'Ζ',
+        L'Η', L'Θ', L'Ι', L'Κ', L'Λ', L'Μ',
+        L'Ν', L'Ξ', L'Ο', L'Π', L'Ρ', L'Σ',
+        L'Τ', L'Υ', L'Φ', L'Χ', L'Ψ', L'Ω'
+    };
 
-        encode_integer(digit,
-                       digit_code,
-                       sizeof(digit_code));
+    for (int i = 0; i < 24; i++) {
 
-        append_text(output,
-                    output_size,
-                    digit_code);
+        if (c == greek[i])
+            return 28 + i;
+    }
 
-        if (fraction < 0.000000000001)
+    /*
+       Cyrillic
+    */
+
+    const wchar_t cyrillic[] = {
+        L'А', L'Б', L'В', L'Г', L'Д', L'Е',
+        L'Ё', L'Ж', L'З', L'И', L'Й', L'К',
+        L'Л', L'М', L'Н', L'О', L'П', L'Р',
+        L'С', L'Т', L'У', L'Ф', L'Х', L'Ц',
+        L'Ч', L'Ш', L'Щ', L'Ъ', L'Ы', L'Ь',
+        L'Э', L'Ю', L'Я'
+    };
+
+    for (int i = 0; i < 33; i++) {
+
+        if (c == cyrillic[i])
+            return 52 + i;
+    }
+
+    return -1;
+}
+
+wchar_t number_to_character(int n) {
+
+    /*
+       Latin + Ñ
+    */
+
+    if (n >= 1 && n <= 14)
+        return L'A' + (n - 1);
+
+    if (n == 15)
+        return L'Ñ';
+
+    if (n >= 16 && n <= 27)
+        return L'O' + (n - 16);
+
+    /*
+       Greek
+    */
+
+    const wchar_t greek[] = {
+        L'Α', L'Β', L'Γ', L'Δ', L'Ε', L'Ζ',
+        L'Η', L'Θ', L'Ι', L'Κ', L'Λ', L'Μ',
+        L'Ν', L'Ξ', L'Ο', L'Π', L'Ρ', L'Σ',
+        L'Τ', L'Υ', L'Φ', L'Χ', L'Ψ', L'Ω'
+    };
+
+    if (n >= 28 && n <= 51)
+        return greek[n - 28];
+
+    /*
+       Cyrillic
+    */
+
+    const wchar_t cyrillic[] = {
+        L'А', L'Б', L'В', L'Г', L'Д', L'Е',
+        L'Ё', L'Ж', L'З', L'И', L'Й', L'К',
+        L'Л', L'М', L'Н', L'О', L'П', L'Р',
+        L'С', L'Т', L'У', L'Ф', L'Х', L'Ц',
+        L'Ч', L'Ш', L'Щ', L'Ъ', L'Ы', L'Ь',
+        L'Э', L'Ю', L'Я'
+    };
+
+    if (n >= 52 && n <= 84)
+        return cyrillic[n - 52];
+
+    return L'?';
+}
+
+/* ============================================================
+   TEXT -> CALAPH
+   ============================================================ */
+
+void text_to_calaph(void) {
+
+    wchar_t input[4096];
+
+    header("TEXT", "ENCRYPT");
+
+    printf(BOLD WHITE "  INPUT\n" RESET);
+    line();
+
+    printf("  Enter ordinary text:\n");
+    printf(GREEN "  > " RESET);
+
+    if (!fgetws(input, 4096, stdin))
+        return;
+
+    printf("\n");
+
+    printf(BOLD WHITE "  PROCESSING\n" RESET);
+    line();
+
+    printf("\n");
+
+    for (size_t i = 0; input[i] != L'\0'; i++) {
+
+        if (input[i] == L'\n')
             break;
-    }
-}
 
-/* ============================================================
-                       BINARY CONVERSION
-   ============================================================ */
+        if (iswspace(input[i])) {
 
-/*
-    Binary conversion operates on UTF-8 bytes.
-
-    Calaph text is therefore converted to/from its UTF-8
-    representation byte-by-byte.
-
-    Each byte becomes exactly 8 binary bits.
-*/
-
-static void byte_to_binary(unsigned char byte,
-                           char *output)
-{
-    for (int i = 7; i >= 0; i--) {
-        *output++ = ((byte >> i) & 1) ? '1' : '0';
-    }
-
-    *output = '\0';
-}
-
-static int binary_to_byte(const char *bits)
-{
-    int value = 0;
-
-    for (int i = 0; i < 8; i++) {
-        value <<= 1;
-
-        if (bits[i] == '1')
-            value |= 1;
-        else if (bits[i] != '0')
-            return -1;
-    }
-
-    return value;
-}
-
-/* ------------------------------------------------------------
-                      Calaph -> Binary
-   ------------------------------------------------------------ */
-
-static void calaph_to_binary(const char *input)
-{
-    char buffer[8192];
-    char *token;
-
-    strcpy(buffer, input);
-
-    printf("\n%sBinary:%s\n\n", CYAN, RESET);
-
-    token = strtok(buffer, " ");
-
-    while (token != NULL) {
-
-        long long value = evaluate_calaph(token);
-
-        if (value < 0) {
-            printf("%sInvalid Calaph expression.%s\n",
-                   RED, RESET);
-            return;
-        }
-
-        /*
-            Numerical Calaph values are represented as their
-            numeric byte value when possible.
-        */
-
-        if (value > 255) {
-            printf("%sValue exceeds one byte: %lld%s\n",
-                   RED, value, RESET);
-            return;
-        }
-
-        char bits[9];
-
-        byte_to_binary((unsigned char)value, bits);
-
-        printf("%s", bits);
-
-        token = strtok(NULL, " ");
-    }
-
-    printf("\n");
-}
-
-/* ------------------------------------------------------------
-                      Binary -> Calaph
-   ------------------------------------------------------------ */
-
-static void binary_to_calaph(const char *input)
-{
-    char buffer[8192];
-    char clean[8192];
-
-    strcpy(buffer, input);
-
-    size_t j = 0;
-
-    for (size_t i = 0; buffer[i]; i++) {
-        if (buffer[i] == '0' || buffer[i] == '1') {
-            clean[j++] = buffer[i];
-        }
-    }
-
-    clean[j] = '\0';
-
-    if (!is_binary_string(clean) ||
-        strlen(clean) % 8 != 0) {
-
-        printf("%sInvalid binary data.%s\n",
-               RED, RESET);
-        return;
-    }
-
-    printf("\n%sCalaph:%s\n\n", CYAN, RESET);
-
-    for (size_t i = 0; i < strlen(clean); i += 8) {
-
-        int value = binary_to_byte(clean + i);
-
-        if (value < 0) {
-            printf("%sInvalid binary byte.%s\n",
-                   RED, RESET);
-            return;
-        }
-
-        char encoded[2048];
-
-        encode_integer(value,
-                       encoded,
-                       sizeof(encoded));
-
-        if (i > 0)
-            printf(" ");
-
-        printf("%s", encoded);
-    }
-
-    printf("\n");
-}
-
-/* ============================================================
-                     HEXADECIMAL CONVERSION
-   ============================================================ */
-
-/* ------------------------------------------------------------
-                      Calaph -> Hex
-   ------------------------------------------------------------ */
-
-static void calaph_to_hex(const char *input)
-{
-    char buffer[8192];
-    char *token;
-
-    strcpy(buffer, input);
-
-    printf("\n%sHexadecimal:%s\n\n", CYAN, RESET);
-
-    token = strtok(buffer, " ");
-
-    while (token != NULL) {
-
-        long long value = evaluate_calaph(token);
-
-        if (value < 0) {
-            printf("%sInvalid Calaph expression.%s\n",
-                   RED, RESET);
-            return;
-        }
-
-        if (value > 255) {
-            printf("%sValue exceeds one byte: %lld%s\n",
-                   RED, value, RESET);
-            return;
-        }
-
-        printf("%02X",
-               (unsigned int)value);
-
-        token = strtok(NULL, " ");
-    }
-
-    printf("\n");
-}
-
-/* ------------------------------------------------------------
-                      Hex -> Calaph
-   ------------------------------------------------------------ */
-
-static void hex_to_calaph(const char *input)
-{
-    char clean[8192];
-    size_t j = 0;
-
-    for (size_t i = 0; input[i]; i++) {
-
-        if (isxdigit((unsigned char)input[i])) {
-            clean[j++] = input[i];
-        }
-        else if (isspace((unsigned char)input[i])) {
+            printf(DIM "  [SPACE]" RESET "\n");
             continue;
         }
-        else {
-            printf("%sInvalid hexadecimal data.%s\n",
-                   RED, RESET);
-            return;
-        }
-    }
 
-    clean[j] = '\0';
+        int number = character_to_number(input[i]);
 
-    if (j == 0 || j % 2 != 0) {
-        printf("%sHexadecimal must contain complete bytes.%s\n",
-               RED, RESET);
-        return;
-    }
+        if (number < 0) {
 
-    printf("\n%sCalaph:%s\n\n", CYAN, RESET);
+            wprintf(L"  %lc ", input[i]);
+            printf(RED "→ unsupported\n" RESET);
 
-    for (size_t i = 0; i < j; i += 2) {
-
-        int high = hex_value(clean[i]);
-        int low  = hex_value(clean[i + 1]);
-
-        if (high < 0 || low < 0) {
-            printf("%sInvalid hexadecimal data.%s\n",
-                   RED, RESET);
-            return;
+            continue;
         }
 
-        int value = high * 16 + low;
+        char encoded[1024];
 
-        char encoded[2048];
+        encode_integer(number, encoded, sizeof(encoded));
 
-        encode_integer(value,
-                       encoded,
-                       sizeof(encoded));
-
-        if (i > 0)
-            printf(" ");
-
-        printf("%s", encoded);
+        wprintf(L"  %lc ", input[i]);
+        printf(CYAN "→" RESET " %s\n", encoded);
     }
 
     printf("\n");
+
+    printf(BOLD WHITE "  OUTPUT\n" RESET);
+    line();
+
+    printf(GREEN "  ");
+
+    for (size_t i = 0; input[i] != L'\0'; i++) {
+
+        if (input[i] == L'\n')
+            break;
+
+        if (iswspace(input[i])) {
+
+            printf(" / ");
+            continue;
+        }
+
+        int number = character_to_number(input[i]);
+
+        if (number < 0) {
+
+            printf("? ");
+            continue;
+        }
+
+        char encoded[1024];
+
+        encode_integer(number, encoded, sizeof(encoded));
+
+        printf("%s ", encoded);
+    }
+
+    printf(RESET "\n");
 }
 
 /* ============================================================
-                         MORSE TABLE
+   CALAPH -> TEXT
    ============================================================ */
 
-typedef struct {
-    char character;
-    const char *code;
-} MorseEntry;
+void calaph_to_text(void) {
 
-static const MorseEntry morse_table[] = {
+    char input[8192];
 
-    {'A', ".-"},
-    {'B', "-..."},
-    {'C', "-.-."},
-    {'D', "-.."},
-    {'E', "."},
-    {'F', "..-."},
-    {'G', "--."},
-    {'H', "...."},
-    {'I', ".."},
-    {'J', ".---"},
-    {'K', "-.-"},
-    {'L', ".-.."},
-    {'M', "--"},
-    {'N', "-."},
-    {'O', "---"},
-    {'P', ".--."},
-    {'Q', "--.-"},
-    {'R', ".-."},
-    {'S', "..."},
-    {'T', "-"},
-    {'U', "..-"},
-    {'V', "...-"},
-    {'W', ".--"},
-    {'X', "-..-"},
-    {'Y', "-.--"},
-    {'Z', "--.."},
+    header("TEXT", "DECRYPT");
 
-    {'0', "-----"},
-    {'1', ".----"},
-    {'2', "..---"},
-    {'3', "...--"},
-    {'4', "....-"},
-    {'5', "....."},
-    {'6', "-...."},
-    {'7', "--..."},
-    {'8', "---.."},
-    {'9', "----."},
+    printf(BOLD WHITE "  INPUT\n" RESET);
+    line();
 
-    {'.', ".-.-.-"},
-    {',', "--..--"},
-    {'?', "..--.."},
-    {'!', "-.-.--"},
-    {'/', "-..-."},
-    {'(', "-.--."},
-    {')', "-.--.-"},
-    {'&', ".-..."},
-    {':', "---..."},
-    {';', "-.-.-."},
-    {'=', "-...-"},
-    {'+', ".-.-."},
-    {'-', "-....-"},
-    {'_', "..--.-"},
-    {'"', ".-..-."},
-    {'$', "...-..-"},
-    {'@', ".--.-."},
+    printf("  Enter Calaph:\n");
+    printf(GREEN "  > " RESET);
 
-    {'\0', NULL}
-};
+    if (!fgets(input, sizeof(input), stdin))
+        return;
 
-/* ------------------------------------------------------------
-                       Character -> Morse
-   ------------------------------------------------------------ */
+    printf("\n");
 
-static const char *char_to_morse(char c)
-{
-    c = (char)toupper((unsigned char)c);
+    printf(BOLD WHITE "  OUTPUT\n" RESET);
+    line();
 
-    for (int i = 0; morse_table[i].character != '\0'; i++) {
+    printf(GREEN "  ");
 
-        if (morse_table[i].character == c)
-            return morse_table[i].code;
-    }
-
-    return NULL;
-}
-
-/* ------------------------------------------------------------
-                       Morse -> Character
-   ------------------------------------------------------------ */
-
-static char morse_to_char(const char *code)
-{
-    for (int i = 0; morse_table[i].character != '\0'; i++) {
-
-        if (strcmp(morse_table[i].code, code) == 0)
-            return morse_table[i].character;
-    }
-
-    return '\0';
-}
-
-/* ------------------------------------------------------------
-                      Calaph -> Morse
-   ------------------------------------------------------------ */
-
-static void calaph_to_morse(const char *input)
-{
-    char buffer[8192];
-    char *token;
-
-    strcpy(buffer, input);
-
-    printf("\n%sMorse:%s\n\n", CYAN, RESET);
-
-    token = strtok(buffer, " ");
+    char *token = strtok(input, " \n");
 
     while (token != NULL) {
 
-        long long value = evaluate_calaph(token);
+        if (strcmp(token, "/") == 0) {
 
-        if (value < 0 || value > 255) {
-            printf("%sInvalid Calaph value.%s\n",
-                   RED, RESET);
-            return;
-        }
-
-        char character = (char)value;
-
-        const char *morse = char_to_morse(character);
-
-        if (!morse) {
-            printf("%s[unsupported]%s", RED, RESET);
-        }
-        else {
-            printf("%s", morse);
-        }
-
-        token = strtok(NULL, " ");
-
-        if (token != NULL)
             printf(" ");
+
+        } else {
+
+            int value = evaluate_calaph(token);
+
+            if (value >= 0) {
+
+                wchar_t character =
+                    number_to_character(value);
+
+                wprintf(L"%lc", character);
+
+            } else {
+
+                printf("?");
+            }
+        }
+
+        token = strtok(NULL, " \n");
     }
 
-    printf("\n");
+    printf(RESET "\n");
 }
 
-/* ------------------------------------------------------------
-                      Morse -> Calaph
-   ------------------------------------------------------------ */
+/* ============================================================
+   MORSE ENCODING
+   ============================================================ */
 
-static void morse_to_calaph(const char *input)
-{
-    char buffer[8192];
+const char *morse_encode_char(char c) {
 
-    strcpy(buffer, input);
+    switch (toupper((unsigned char)c)) {
 
-    printf("\n%sCalaph:%s\n\n", CYAN, RESET);
+        case 'A': return ".-";
+        case 'B': return "-...";
+        case 'C': return "-.-.";
+        case 'D': return "-..";
+        case 'E': return ".";
+        case 'F': return "..-.";
+        case 'G': return "--.";
+        case 'H': return "....";
+        case 'I': return "..";
+        case 'J': return ".---";
+        case 'K': return "-.-";
+        case 'L': return ".-..";
+        case 'M': return "--";
+        case 'N': return "-.";
+        case 'O': return "---";
+        case 'P': return ".--.";
+        case 'Q': return "--.-";
+        case 'R': return ".-.";
+        case 'S': return "...";
+        case 'T': return "-";
+        case 'U': return "..-";
+        case 'V': return "...-";
+        case 'W': return ".--";
+        case 'X': return "-..-";
+        case 'Y': return "-.--";
+        case 'Z': return "--..";
 
-    /*
-        Words can be separated with /.
+        case '0': return "-----";
+        case '1': return ".----";
+        case '2': return "..---";
+        case '3': return "...--";
+        case '4': return "....-";
+        case '5': return ".....";
+        case '6': return "-....";
+        case '7': return "--...";
+        case '8': return "---..";
+        case '9': return "----.";
 
-        Characters are separated by spaces.
+        default:
+            return NULL;
+    }
+}
 
-        Example:
+/* ============================================================
+   MORSE DECODING
+   ============================================================ */
 
-            .... . .-.. .-.. ---
+char morse_decode_code(const char *code) {
 
-        becomes:
+    const char *codes[] = {
 
-            8 5 12 12 16
-    */
+        ".-", "-...", "-.-.", "-..", ".", "..-.",
+        "--.", "....", "..", ".---", "-.-", ".-..",
+        "--", "-.", "---", ".--.", "--.-", ".-.",
+        "...", "-", "..-", "...-", ".--", "-..-",
+        "-.--", "--.."
+    };
 
-    char *word = strtok(buffer, "/");
+    for (int i = 0; i < 26; i++) {
 
-    int first_word = 1;
+        if (strcmp(code, codes[i]) == 0)
+            return 'A' + i;
+    }
 
-    while (word != NULL) {
+    const char *digits[] = {
 
-        if (!first_word)
-            printf("  ");
+        "-----", ".----", "..---", "...--", "....-",
+        ".....", "-....", "--...", "---..", "----."
+    };
 
-        first_word = 0;
+    for (int i = 0; i < 10; i++) {
 
-        char *code = strtok(word, " \t");
+        if (strcmp(code, digits[i]) == 0)
+            return '0' + i;
+    }
 
-        int first_char = 1;
+    return '?';
+}
 
-        while (code != NULL) {
+/* ============================================================
+   CALAPH -> MORSE
+   ============================================================ */
 
-            char character = morse_to_char(code);
+void calaph_to_morse(void) {
 
-            if (character == '\0') {
-                printf("%s<?>%s", RED, RESET);
+    char input[8192];
+
+    header("CODES", "CALAPH → MORSE");
+
+    printf(BOLD WHITE "  INPUT\n" RESET);
+    line();
+
+    printf("  Enter Calaph:\n");
+    printf(GREEN "  > " RESET);
+
+    if (!fgets(input, sizeof(input), stdin))
+        return;
+
+    printf("\n");
+
+    printf(BOLD WHITE "  MORSE OUTPUT\n" RESET);
+    line();
+
+    printf(GREEN "  ");
+
+    char *token = strtok(input, " \n");
+
+    while (token != NULL) {
+
+        if (strcmp(token, "/") == 0) {
+
+            printf("/ ");
+
+        } else {
+
+            int value = evaluate_calaph(token);
+
+            if (value >= 1 && value <= 26) {
+
+                char c = 'A' + value - 1;
+
+                const char *morse =
+                    morse_encode_char(c);
+
+                if (morse)
+                    printf("%s ", morse);
+                else
+                    printf("? ");
+
+            } else {
+
+                printf("? ");
             }
-            else {
+        }
 
-                if (!first_char)
-                    printf(" ");
+        token = strtok(NULL, " \n");
+    }
 
-                /*
-                    Convert the ASCII character into its
-                    numerical value and then into Calaph.
-                */
+    printf(RESET "\n");
+}
 
-                char encoded[2048];
+/* ============================================================
+   MORSE -> CALAPH
+   ============================================================ */
+
+void morse_to_calaph(void) {
+
+    char input[8192];
+
+    header("CODES", "MORSE → CALAPH");
+
+    printf(BOLD WHITE "  INPUT\n" RESET);
+    line();
+
+    printf("  Enter Morse:\n");
+    printf(GREEN "  > " RESET);
+
+    if (!fgets(input, sizeof(input), stdin))
+        return;
+
+    printf("\n");
+
+    printf(BOLD WHITE "  CALAPH OUTPUT\n" RESET);
+    line();
+
+    printf(GREEN "  ");
+
+    char *token = strtok(input, " \n");
+
+    while (token != NULL) {
+
+        if (strcmp(token, "/") == 0) {
+
+            printf("/ ");
+
+        } else {
+
+            char c = morse_decode_code(token);
+
+            if (c == '?') {
+
+                printf("? ");
+
+            } else {
+
+                int number = character_to_number(c);
+
+                char encoded[1024];
 
                 encode_integer(
-                    (unsigned char)character,
+                    number,
                     encoded,
                     sizeof(encoded)
                 );
 
-                printf("%s", encoded);
+                printf("%s ", encoded);
             }
-
-            first_char = 0;
-
-            code = strtok(NULL, " \t");
         }
 
-        word = strtok(NULL, "/");
+        token = strtok(NULL, " \n");
     }
 
-    printf("\n");
+    printf(RESET "\n");
 }
 
 /* ============================================================
-                       MAIN MENU
+   CALAPH -> HEX
    ============================================================ */
 
-static void print_logo(void)
-{
-    printf(
-        "%s"
-        "   ██████╗ █████╗ ██╗      █████╗ ██████╗ ██╗  ██╗\n"
-        "  ██╔════╝██╔══██╗██║     ██╔══██╗██╔══██╗██║  ██║\n"
-        "  ██║     ███████║██║     ███████║██████╔╝███████║\n"
-        "  ██║     ██╔══██║██║     ██╔══██║██╔═══╝ ██╔══██║\n"
-        "  ╚██████╗██║  ██║███████╗██║  ██║██║     ██║  ██║\n"
-        "   ╚═════╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝  ╚═╝\n"
-        "%s",
-        CYAN,
-        RESET
-    );
-
-    printf("\n%sSymbolic Conversion System%s\n\n",
-           BOLD,
-           RESET);
-}
-
-static void print_menu(void)
-{
-    printf("%s1.%s  Calaph -> Morse\n",
-           YELLOW, RESET);
-
-    printf("%s2.%s  Morse -> Calaph\n",
-           YELLOW, RESET);
-
-    printf("%s3.%s  Calaph -> Hexadecimal\n",
-           YELLOW, RESET);
-
-    printf("%s4.%s  Hexadecimal -> Calaph\n",
-           YELLOW, RESET);
-
-    printf("%s5.%s  Calaph -> Binary\n",
-           YELLOW, RESET);
-
-    printf("%s6.%s  Binary -> Calaph\n",
-           YELLOW, RESET);
-
-    printf("%s0.%s  Exit\n",
-           YELLOW, RESET);
-
-    printf("\n");
-}
-
-/* ============================================================
-                             MAIN
-   ============================================================ */
-
-int main(void)
-{
-    setlocale(LC_ALL, "");
+void calaph_to_hex(void) {
 
     char input[8192];
-    int choice;
+
+    header("CODES", "CALAPH → HEXADECIMAL");
+
+    printf(BOLD WHITE "  INPUT\n" RESET);
+    line();
+
+    printf("  Enter Calaph:\n");
+    printf(GREEN "  > " RESET);
+
+    if (!fgets(input, sizeof(input), stdin))
+        return;
+
+    printf("\n");
+
+    printf(BOLD WHITE "  HEXADECIMAL OUTPUT\n" RESET);
+    line();
+
+    printf(GREEN "  ");
+
+    char *token = strtok(input, " \n");
+
+    while (token != NULL) {
+
+        if (strcmp(token, "/") == 0) {
+
+            printf("20 ");
+
+        } else {
+
+            int value = evaluate_calaph(token);
+
+            if (value >= 0 && value <= 255)
+                printf("%02X ", value);
+            else
+                printf("?? ");
+        }
+
+        token = strtok(NULL, " \n");
+    }
+
+    printf(RESET "\n");
+}
+
+/* ============================================================
+   HEX -> CALAPH
+   ============================================================ */
+
+void hex_to_calaph(void) {
+
+    char input[8192];
+
+    header("CODES", "HEXADECIMAL → CALAPH");
+
+    printf(BOLD WHITE "  INPUT\n" RESET);
+    line();
+
+    printf("  Enter hexadecimal:\n");
+    printf(GREEN "  > " RESET);
+
+    if (!fgets(input, sizeof(input), stdin))
+        return;
+
+    printf("\n");
+
+    printf(BOLD WHITE "  CALAPH OUTPUT\n" RESET);
+    line();
+
+    printf(GREEN "  ");
+
+    char *token = strtok(input, " \n");
+
+    while (token != NULL) {
+
+        char *end;
+
+        long value = strtol(token, &end, 16);
+
+        if (*end != '\0' ||
+            value < 0 ||
+            value > 255) {
+
+            printf("? ");
+
+        } else if (value == 0x20) {
+
+            printf("/ ");
+
+        } else {
+
+            char encoded[1024];
+
+            encode_integer(
+                (int)value,
+                encoded,
+                sizeof(encoded)
+            );
+
+            printf("%s ", encoded);
+        }
+
+        token = strtok(NULL, " \n");
+    }
+
+    printf(RESET "\n");
+}
+
+/* ============================================================
+   CALAPH -> BINARY
+   ============================================================ */
+
+void calaph_to_binary(void) {
+
+    char input[8192];
+
+    header("CODES", "CALAPH → BINARY");
+
+    printf(BOLD WHITE "  INPUT\n" RESET);
+    line();
+
+    printf("  Enter Calaph:\n");
+    printf(GREEN "  > " RESET);
+
+    if (!fgets(input, sizeof(input), stdin))
+        return;
+
+    printf("\n");
+
+    printf(BOLD WHITE "  BINARY OUTPUT\n" RESET);
+    line();
+
+    printf(GREEN "  ");
+
+    char *token = strtok(input, " \n");
+
+    while (token != NULL) {
+
+        if (strcmp(token, "/") == 0) {
+
+            printf("00100000 ");
+
+        } else {
+
+            int value = evaluate_calaph(token);
+
+            if (value >= 0 && value <= 255) {
+
+                for (int i = 7; i >= 0; i--)
+                    printf("%d", (value >> i) & 1);
+
+                printf(" ");
+
+            } else {
+
+                printf("???????? ");
+            }
+        }
+
+        token = strtok(NULL, " \n");
+    }
+
+    printf(RESET "\n");
+}
+
+/* ============================================================
+   BINARY -> CALAPH
+   ============================================================ */
+
+void binary_to_calaph(void) {
+
+    char input[8192];
+
+    header("CODES", "BINARY → CALAPH");
+
+    printf(BOLD WHITE "  INPUT\n" RESET);
+    line();
+
+    printf("  Enter binary:\n");
+    printf(GREEN "  > " RESET);
+
+    if (!fgets(input, sizeof(input), stdin))
+        return;
+
+    printf("\n");
+
+    printf(BOLD WHITE "  CALAPH OUTPUT\n" RESET);
+    line();
+
+    printf(GREEN "  ");
+
+    char *token = strtok(input, " \n");
+
+    while (token != NULL) {
+
+        int valid = 1;
+        int value = 0;
+
+        if (strlen(token) != 8) {
+
+            valid = 0;
+
+        } else {
+
+            for (int i = 0; i < 8; i++) {
+
+                if (token[i] != '0' &&
+                    token[i] != '1') {
+
+                    valid = 0;
+                    break;
+                }
+
+                value =
+                    value * 2 +
+                    (token[i] - '0');
+            }
+        }
+
+        if (!valid) {
+
+            printf("? ");
+
+        } else if (value == 0x20) {
+
+            printf("/ ");
+
+        } else {
+
+            char encoded[1024];
+
+            encode_integer(
+                value,
+                encoded,
+                sizeof(encoded)
+            );
+
+            printf("%s ", encoded);
+        }
+
+        token = strtok(NULL, " \n");
+    }
+
+    printf(RESET "\n");
+}
+
+/* ============================================================
+   TEXT MODE MENU
+   ============================================================ */
+
+void text_menu(void) {
+
+    int option;
 
     while (1) {
 
-        clear_screen();
+        header("TEXT MODE", "OPERATIONS");
 
-        print_logo();
-        print_menu();
+        printf(BOLD WHITE
+               "  ┌──────────────────────────────────────────────────────┐\n"
+               "  │                    TEXT OPERATIONS                    │\n"
+               "  └──────────────────────────────────────────────────────┘\n"
+               RESET);
 
-        printf("%sSelect:%s ", GREEN, RESET);
+        printf("\n");
 
-        if (scanf("%d", &choice) != 1) {
+        printf(CYAN "  [ 1 ] " RESET
+               BOLD "Encrypt text to Calaph" RESET "\n");
 
-            while (getchar() != '\n')
-                ;
+        printf(DIM
+               "        TEXT ───────────────────────────► CALAPH\n"
+               RESET);
 
-            printf("%sInvalid option.%s\n",
-                   RED, RESET);
+        printf("\n");
 
-            pause_program();
+        printf(CYAN "  [ 2 ] " RESET
+               BOLD "Decrypt Calaph to text" RESET "\n");
+
+        printf(DIM
+               "        CALAPH ─────────────────────────► TEXT\n"
+               RESET);
+
+        printf("\n");
+
+        printf(CYAN "  [ 3 ] " RESET
+               "Return to main menu\n");
+
+        printf("\n");
+
+        double_line();
+
+        printf("\n");
+        printf(BOLD "  SELECT AN OPTION " RESET
+               CYAN "[1-3]" RESET
+               ": ");
+
+        if (scanf("%d", &option) != 1) {
+
+            while (getchar() != '\n');
+
+            printf(RED "\n  Invalid input.\n" RESET);
+            pause_screen();
+
             continue;
         }
 
         getchar();
 
-        if (choice == 0)
-            break;
-
-        clear_screen();
-        print_logo();
-
-        switch (choice) {
+        switch (option) {
 
             case 1:
 
-                printf(
-                    "%sEnter Calaph:%s\n> ",
-                    GREEN, RESET
-                );
-
-                fgets(input,
-                      sizeof(input),
-                      stdin);
-
-                trim_newline(input);
-
-                calaph_to_morse(input);
-
-                pause_program();
+                text_to_calaph();
+                pause_screen();
 
                 break;
 
             case 2:
 
-                printf(
-                    "%sEnter Morse:%s\n"
-                    "%sUse spaces between characters and / between words.%s\n"
-                    "> ",
-                    GREEN,
-                    RESET,
-                    DIM,
-                    RESET
-                );
-
-                fgets(input,
-                      sizeof(input),
-                      stdin);
-
-                trim_newline(input);
-
-                morse_to_calaph(input);
-
-                pause_program();
+                calaph_to_text();
+                pause_screen();
 
                 break;
 
             case 3:
 
-                printf(
-                    "%sEnter Calaph:%s\n> ",
-                    GREEN,
-                    RESET
-                );
+                return;
 
-                fgets(input,
-                      sizeof(input),
-                      stdin);
+            default:
 
-                trim_newline(input);
+                printf(RED
+                       "\n  ✖ Invalid option.\n"
+                       RESET);
 
-                calaph_to_hex(input);
+                pause_screen();
+        }
+    }
+}
 
-                pause_program();
+/* ============================================================
+   CODE MODE MENU
+   ============================================================ */
+
+void code_menu(void) {
+
+    int option;
+
+    while (1) {
+
+        header("CODE MODE", "CONVERSION MATRIX");
+
+        printf(BOLD WHITE
+               "  ┌──────────────────────────────────────────────────────┐\n"
+               "  │                 CALAPH CONVERSION MATRIX              │\n"
+               "  └──────────────────────────────────────────────────────┘\n"
+               RESET);
+
+        printf("\n");
+
+        printf(MAGENTA
+               "                         CALAPH\n"
+               RESET);
+
+        printf("                           │\n");
+        printf("              ┌────────────┼────────────┐\n");
+        printf("              │            │            │\n");
+        printf("              ▼            ▼            ▼\n");
+
+        printf(CYAN
+               "           BINARY       HEXADECIMAL    MORSE\n"
+               RESET);
+
+        printf("              ▲            ▲            ▲\n");
+        printf("              │            │            │\n");
+        printf("              └────────────┼────────────┘\n");
+        printf("                           │\n");
+
+        printf(MAGENTA
+               "                         CALAPH\n"
+               RESET);
+
+        printf("\n");
+
+        line();
+
+        printf("\n");
+
+        printf(CYAN "  [ 1 ] " RESET
+               BOLD "CALAPH" RESET
+               "  →  BINARY\n");
+
+        printf(CYAN "  [ 2 ] " RESET
+               BOLD "BINARY" RESET
+               "  →  CALAPH\n");
+
+        printf("\n");
+
+        printf(CYAN "  [ 3 ] " RESET
+               BOLD "CALAPH" RESET
+               "  →  HEXADECIMAL\n");
+
+        printf(CYAN "  [ 4 ] " RESET
+               BOLD "HEXADECIMAL" RESET
+               "  →  CALAPH\n");
+
+        printf("\n");
+
+        printf(CYAN "  [ 5 ] " RESET
+               BOLD "CALAPH" RESET
+               "  →  MORSE\n");
+
+        printf(CYAN "  [ 6 ] " RESET
+               BOLD "MORSE" RESET
+               "  →  CALAPH\n");
+
+        printf("\n");
+
+        printf(CYAN "  [ 7 ] " RESET
+               "Return to main menu\n");
+
+        printf("\n");
+
+        double_line();
+
+        printf("\n");
+
+        printf(BOLD "  SELECT AN OPTION " RESET
+               CYAN "[1-7]" RESET
+               ": ");
+
+        if (scanf("%d", &option) != 1) {
+
+            while (getchar() != '\n');
+
+            printf(RED "\n  Invalid input.\n" RESET);
+            pause_screen();
+
+            continue;
+        }
+
+        getchar();
+
+        switch (option) {
+
+            case 1:
+
+                calaph_to_binary();
+                pause_screen();
+
+                break;
+
+            case 2:
+
+                binary_to_calaph();
+                pause_screen();
+
+                break;
+
+            case 3:
+
+                calaph_to_hex();
+                pause_screen();
 
                 break;
 
             case 4:
 
-                printf(
-                    "%sEnter hexadecimal:%s\n> ",
-                    GREEN,
-                    RESET
-                );
-
-                fgets(input,
-                      sizeof(input),
-                      stdin);
-
-                trim_newline(input);
-
-                hex_to_calaph(input);
-
-                pause_program();
+                hex_to_calaph();
+                pause_screen();
 
                 break;
 
             case 5:
 
-                printf(
-                    "%sEnter Calaph:%s\n> ",
-                    GREEN,
-                    RESET
-                );
-
-                fgets(input,
-                      sizeof(input),
-                      stdin);
-
-                trim_newline(input);
-
-                calaph_to_binary(input);
-
-                pause_program();
+                calaph_to_morse();
+                pause_screen();
 
                 break;
 
             case 6:
 
-                printf(
-                    "%sEnter binary:%s\n> ",
-                    GREEN,
-                    RESET
-                );
-
-                fgets(input,
-                      sizeof(input),
-                      stdin);
-
-                trim_newline(input);
-
-                binary_to_calaph(input);
-
-                pause_program();
+                morse_to_calaph();
+                pause_screen();
 
                 break;
+
+            case 7:
+
+                return;
 
             default:
 
-                printf(
-                    "%sInvalid option.%s\n",
-                    RED,
-                    RESET
-                );
+                printf(RED
+                       "\n  ✖ Invalid option.\n"
+                       RESET);
 
-                pause_program();
-
-                break;
+                pause_screen();
         }
     }
+}
 
-    clear_screen();
+/* ============================================================
+   MAIN MENU
+   ============================================================ */
 
-    printf(
-        "%sCalaph terminated.%s\n",
-        CYAN,
-        RESET
-    );
+void main_menu(void) {
+
+    int option;
+
+    while (1) {
+
+        main_header();
+
+        printf(BOLD
+               "  MAIN MENU\n"
+               RESET);
+
+        printf("\n");
+
+        printf(CYAN "  ╔══════════════════════════════════════════════════════╗\n"
+               RESET);
+
+        printf(CYAN "  ║" RESET
+               "                                                      "
+               CYAN "║\n" RESET);
+
+        printf(CYAN "  ║" RESET
+               "   " BOLD CYAN "[ 1 ]" RESET
+               "  ◈  " BOLD "WORK WITH TEXT" RESET
+               "                         "
+               CYAN "║\n" RESET);
+
+        printf(CYAN "  ║" RESET
+               "        Encrypt and decrypt ordinary text             "
+               CYAN "║\n" RESET);
+
+        printf(CYAN "  ║" RESET
+               "                                                      "
+               CYAN "║\n" RESET);
+
+        printf(CYAN "  ║" RESET
+               "   " BOLD MAGENTA "[ 2 ]" RESET
+               "  ◇  " BOLD "WORK WITH CODES" RESET
+               "                        "
+               CYAN "║\n" RESET);
+
+        printf(CYAN "  ║" RESET
+               "        Binary · Hexadecimal · Morse                  "
+               CYAN "║\n" RESET);
+
+        printf(CYAN "  ║" RESET
+               "                                                      "
+               CYAN "║\n" RESET);
+
+        printf(CYAN "  ║" RESET
+               "   " BOLD RED "[ 3 ]" RESET
+               "  ×  " BOLD "EXIT" RESET
+               "                                      "
+               CYAN "║\n" RESET);
+
+        printf(CYAN "  ║" RESET
+               "                                                      "
+               CYAN "║\n" RESET);
+
+        printf(CYAN "  ╚══════════════════════════════════════════════════════╝\n"
+               RESET);
+
+        printf("\n");
+
+        printf(DIM
+               "  ┌────────────────────────────────────────────────────┐\n"
+               "  │"
+               RESET
+               BOLD "  SELECT AN OPTION "
+               RESET
+               CYAN "[1-3]"
+               RESET
+               DIM ":                                    │\n"
+               "  └────────────────────────────────────────────────────┘\n"
+               RESET);
+
+        printf("\n  ");
+
+        if (scanf("%d", &option) != 1) {
+
+            while (getchar() != '\n');
+
+            printf(RED "\n  ✖ Invalid input.\n" RESET);
+
+            pause_screen();
+
+            continue;
+        }
+
+        getchar();
+
+        switch (option) {
+
+            case 1:
+
+                text_menu();
+
+                break;
+
+            case 2:
+
+                code_menu();
+
+                break;
+
+            case 3:
+
+                clear_screen();
+
+                printf("\n");
+
+                top_border();
+
+                printf(CYAN "  ║" RESET
+                       "                                                          "
+                       CYAN "║\n" RESET);
+
+                printf(CYAN "  ║" RESET
+                       BOLD GREEN
+                       "                     CALAPH CLOSED                     "
+                       RESET
+                       CYAN "║\n" RESET);
+
+                printf(CYAN "  ║" RESET
+                       "                                                          "
+                       CYAN "║\n" RESET);
+
+                printf(CYAN "  ║" RESET
+                       DIM
+                       "              Thank you for using Calaph.              "
+                       RESET
+                       CYAN "║\n" RESET);
+
+                printf(CYAN "  ║" RESET
+                       "                                                          "
+                       CYAN "║\n" RESET);
+
+                bottom_border();
+
+                printf("\n");
+
+                return;
+
+            default:
+
+                printf(RED
+                       "\n  ✖ Invalid option.\n"
+                       RESET);
+
+                pause_screen();
+        }
+    }
+}
+
+/* ============================================================
+   MAIN
+   ============================================================ */
+
+int main(void) {
+
+    setlocale(LC_ALL, "");
+
+    main_menu();
 
     return 0;
-}
 }
