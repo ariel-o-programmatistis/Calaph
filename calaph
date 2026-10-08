@@ -1,67 +1,15 @@
-/* Calaph
+/*
+ * CALAPH
+ * Sistema de escritura y conversión de texto
  *
- * Portable C implementation.
+ * Funciones:
+ *   1. Texto ordinario -> Calaph
+ *   2. Calaph -> texto ordinario
  *
- * Core Calaph rules:
+ * No contiene funciones de Binary, Hexadecimal ni Morse.
  *
- * Primitive symbols:
- *     .  = 1
- *     ,  = 3
- *     <> = 0
- *
- * IMPORTANT:
- * "." and "," are primitive values.
- * Their combinations are OPERATIONS, not additional primitive symbols.
- *
- * Established equivalent representations:
- *     .       = 1
- *     ..      = 2
- *     .,      = 2
- *     ...     = 3
- *     ,       = 3
- *     ....    = 4
- *     ,.      = 4
- *     .....   = 5
- *     .,,     = 5
- *     ......  = 6
- *     ,,      = 6
- *     ....... = 7
- *     ,,.     = 7
- *     ........ = 8
- *     .,,,    = 8
- *     ......... = 9
- *     ,,,     = 9
- *     .......... = 10
- *     ,,,.    = 10
- *
- * Operators:
- *     '  = multiplication
- *     ' ' = addition
- *     |  = decimal separator
- *     \  = fractional-digit separator
- *     /  = ordinary text-space token
- *
- * Character separator in encoded text:
- *     two or more spaces
- *
- * Thus:
- *
- *     .  .,  ,
- *
- * represents A B C, while:
- *
- *     ,, .
- *
- * is one numerical expression: 6 + 1 = 7.
- *
- * Established special representations:
- *     .,',,.     = 50
- *     ,,,.',,,.  = 100
- *
- * Text conversion intentionally ignores letter case.
- *
- * No POSIX functions, wide I/O, locale-dependent parsing,
- * or external libraries are required.
+ * Compilación:
+ *   gcc -std=c99 -Wall -Wextra -Wpedantic -O2 calaph -o calaph
  */
 
 #include <stdio.h>
@@ -69,600 +17,210 @@
 #include <string.h>
 #include <ctype.h>
 #include <stdint.h>
-#include <stddef.h>
-#include <limits.h>
+#include <stdbool.h>
 
-#define INPUT_MAX   16384
-#define OUTPUT_MAX  65536
-#define TOKEN_MAX   1024
-#define MORSE_MAX   32
-
-#define C_RESET   "\033[0m"
-#define C_BOLD    "\033[1m"
-#define C_CYAN    "\033[36m"
-#define C_BLUE    "\033[34m"
-#define C_GREEN   "\033[32m"
-#define C_YELLOW  "\033[33m"
-#define C_RED     "\033[31m"
-#define C_MAGENTA "\033[35m"
+#define INPUT_SIZE 65536
+#define OUTPUT_SIZE 262144
 
 /* ============================================================
- * INPUT / OUTPUT
+ * UTILIDADES
  * ============================================================ */
 
-static int read_line(char *buf, size_t cap)
+static void clear_input_line(void)
 {
-    size_t n;
-    int ch;
+    int c;
 
-    if (buf == NULL || cap < 2)
-        return 0;
-
-    if (fgets(buf, (int)cap, stdin) == NULL)
-        return 0;
-
-    n = strlen(buf);
-
-    if (n > 0 && buf[n - 1] == '\n') {
-        buf[n - 1] = '\0';
-
-        if (n > 1 && buf[n - 2] == '\r')
-            buf[n - 2] = '\0';
-
-        return 1;
-    }
-
-    while ((ch = getchar()) != '\n' && ch != EOF)
+    while ((c = getchar()) != '\n' && c != EOF)
         ;
-
-    if (ch == EOF)
-        return 1;
-
-    return -1;
 }
 
-static int parse_menu_number(const char *s, int *out)
+static void read_line(char *buffer, size_t size)
 {
-    char *end;
-    long value;
+    if (buffer == NULL || size == 0)
+        return;
 
-    if (s == NULL || out == NULL)
-        return 0;
-
-    while (isspace((unsigned char)*s))
-        ++s;
-
-    if (*s == '\0')
-        return 0;
-
-    value = strtol(s, &end, 10);
-
-    if (end == s)
-        return 0;
-
-    while (isspace((unsigned char)*end))
-        ++end;
-
-    if (*end != '\0')
-        return 0;
-
-    if (value < INT_MIN || value > INT_MAX)
-        return 0;
-
-    *out = (int)value;
-    return 1;
-}
-
-static int append_char(
-    char *out,
-    size_t cap,
-    size_t *pos,
-    char c
-)
-{
-    if (out == NULL || pos == NULL)
-        return 0;
-
-    if (*pos + 1 >= cap)
-        return 0;
-
-    out[*pos] = c;
-    ++(*pos);
-    out[*pos] = '\0';
-
-    return 1;
-}
-
-static int append_str(
-    char *out,
-    size_t cap,
-    size_t *pos,
-    const char *s
-)
-{
-    size_t n;
-
-    if (out == NULL || pos == NULL || s == NULL)
-        return 0;
-
-    n = strlen(s);
-
-    if (*pos + n >= cap)
-        return 0;
-
-    memcpy(out + *pos, s, n);
-    *pos += n;
-    out[*pos] = '\0';
-
-    return 1;
-}
-
-static int get_input(
-    const char *prompt,
-    char *buf,
-    size_t cap
-)
-{
-    int result;
-
-    printf("%s%s%s", C_YELLOW, prompt, C_RESET);
-
-    result = read_line(buf, cap);
-
-    if (result == 0) {
-        printf("\n");
-        return 0;
+    if (fgets(buffer, (int)size, stdin) == NULL) {
+        buffer[0] = '\0';
+        return;
     }
 
-    if (result < 0) {
-        printf(
-            "%sInput is too long.%s\n",
-            C_RED,
-            C_RESET
-        );
-        return 0;
-    }
+    size_t len = strlen(buffer);
 
-    return 1;
+    if (len > 0 && buffer[len - 1] == '\n') {
+        buffer[len - 1] = '\0';
+    } else {
+        clear_input_line();
+    }
+}
+
+static void wait_for_menu_input(void)
+{
+    /*
+     * Intencionalmente vacío.
+     *
+     * Calaph no utiliza "Press ENTER to continue".
+     */
 }
 
 /* ============================================================
- * CALAPH NUMERIC ENGINE
+ * UTF-8
  * ============================================================ */
 
-/*
- * "." and "," are always primitive values:
- *
- *     . = 1
- *     , = 3
- *
- * Their combination is evaluated as an operation.
- *
- * The established pattern is:
- *
- *     only dots:
- *         n dots = n
- *
- *     starts with comma:
- *         each comma contributes 3
- *         each dot contributes 1
- *
- *     starts with dot and contains comma:
- *         the initial dot acts subtractively:
- *
- *             .,    = 3 - 1 = 2
- *             .,,   = 3 + 3 - 1 = 5
- *             .,,,  = 3 + 3 + 3 - 1 = 8
- *
- * This produces all established representations for 1..10
- * without treating combinations as primitive symbols.
- */
-static int parse_symbol_expression(
-    const char *s,
-    size_t len,
-    size_t *used,
-    long long *value
-)
+static size_t utf8_decode_one(const unsigned char *s, size_t remaining,
+                              uint32_t *codepoint)
 {
-    size_t i;
-    long long total = 0;
-    int has_comma = 0;
-    int starts_with_dot;
-
-    if (s == NULL ||
-        len == 0 ||
-        used == NULL ||
-        value == NULL)
-    {
+    if (s == NULL || codepoint == NULL || remaining == 0)
         return 0;
-    }
 
-    if (len >= 2 && s[0] == '<' && s[1] == '>') {
-        *used = 2;
-        *value = 0;
+    unsigned char c = s[0];
+
+    if (c < 0x80) {
+        *codepoint = c;
         return 1;
     }
 
-    if (s[0] != '.' && s[0] != ',')
-        return 0;
-
-    starts_with_dot = (s[0] == '.');
-
-    for (i = 0;
-         i < len && (s[i] == '.' || s[i] == ',');
-         ++i)
-    {
-        if (s[i] == ',') {
-            has_comma = 1;
-
-            if (total > LLONG_MAX - 3)
-                return 0;
-
-            total += 3;
-        } else {
-            if (total > LLONG_MAX - 1)
-                return 0;
-
-            total += 1;
-        }
-    }
-
-    if (i == 0)
-        return 0;
-
-    if (starts_with_dot && has_comma) {
-        if (total < 2)
+    if ((c & 0xE0) == 0xC0) {
+        if (remaining < 2)
             return 0;
 
-        total -= 2;
+        unsigned char c1 = s[1];
+
+        if ((c1 & 0xC0) != 0x80)
+            return 0;
+
+        uint32_t cp =
+            ((uint32_t)(c & 0x1F) << 6) |
+            (uint32_t)(c1 & 0x3F);
+
+        if (cp < 0x80)
+            return 0;
+
+        *codepoint = cp;
+        return 2;
     }
 
-    *used = i;
-    *value = total;
+    if ((c & 0xF0) == 0xE0) {
+        if (remaining < 3)
+            return 0;
 
-    return 1;
+        unsigned char c1 = s[1];
+        unsigned char c2 = s[2];
+
+        if ((c1 & 0xC0) != 0x80 ||
+            (c2 & 0xC0) != 0x80)
+            return 0;
+
+        uint32_t cp =
+            ((uint32_t)(c & 0x0F) << 12) |
+            ((uint32_t)(c1 & 0x3F) << 6) |
+            (uint32_t)(c2 & 0x3F);
+
+        if (cp < 0x800)
+            return 0;
+
+        if (cp >= 0xD800 && cp <= 0xDFFF)
+            return 0;
+
+        *codepoint = cp;
+        return 3;
+    }
+
+    if ((c & 0xF8) == 0xF0) {
+        if (remaining < 4)
+            return 0;
+
+        unsigned char c1 = s[1];
+        unsigned char c2 = s[2];
+        unsigned char c3 = s[3];
+
+        if ((c1 & 0xC0) != 0x80 ||
+            (c2 & 0xC0) != 0x80 ||
+            (c3 & 0xC0) != 0x80)
+            return 0;
+
+        uint32_t cp =
+            ((uint32_t)(c & 0x07) << 18) |
+            ((uint32_t)(c1 & 0x3F) << 12) |
+            ((uint32_t)(c2 & 0x3F) << 6) |
+            (uint32_t)(c3 & 0x3F);
+
+        if (cp < 0x10000 || cp > 0x10FFFF)
+            return 0;
+
+        *codepoint = cp;
+        return 4;
+    }
+
+    return 0;
 }
 
-static int parse_operand(
-    const char *s,
-    size_t len,
-    size_t *used,
-    long long *value
-)
+static size_t utf8_encode_one(uint32_t cp, char *out, size_t capacity)
 {
-    return parse_symbol_expression(
-        s,
-        len,
-        used,
-        value
-    );
-}
-
-static int parse_product(
-    const char *s,
-    size_t len,
-    size_t *used,
-    long long *value
-)
-{
-    size_t p = 0;
-    size_t n;
-    long long a;
-    long long b;
-
-    if (!parse_operand(s, len, &n, &a))
+    if (out == NULL)
         return 0;
 
-    p += n;
-
-    if (p < len && s[p] == '\'') {
-        ++p;
-
-        if (!parse_operand(
-                s + p,
-                len - p,
-                &n,
-                &b))
-        {
-            return 0;
-        }
-
-        p += n;
-
-        if (p < len && s[p] == '\'')
+    if (cp <= 0x7F) {
+        if (capacity < 1)
             return 0;
 
-        if (a != 0 &&
-            b > LLONG_MAX / a)
-        {
-            return 0;
-        }
-
-        a *= b;
-    }
-
-    *used = p;
-    *value = a;
-
-    return 1;
-}
-
-/*
- * One literal space means addition.
- *
- * Example:
- *
- *     ,, .
- *
- *     6 + 1 = 7
- *
- * Two or more spaces are character separators and therefore
- * are not valid inside a single numerical expression.
- */
-static int evaluate_calaph(
-    const char *s,
-    size_t len,
-    long long *result
-)
-{
-    size_t p = 0;
-    size_t n;
-    long long total = 0;
-    long long term;
-    int saw = 0;
-
-    if (s == NULL ||
-        len == 0 ||
-        result == NULL)
-    {
-        return 0;
-    }
-
-    /*
-     * Explicit project-defined representation.
-     */
-    if (len == 6 &&
-        memcmp(s, ".,',,.", 6) == 0)
-    {
-        *result = 50;
+        out[0] = (char)cp;
         return 1;
     }
 
-    /*
-     * Explicit project-defined representation.
-     */
-    if (len == 8 &&
-        memcmp(s, ",,,.',,,.", 8) == 0)
-    {
-        *result = 100;
-        return 1;
+    if (cp <= 0x7FF) {
+        if (capacity < 2)
+            return 0;
+
+        out[0] = (char)(0xC0 | (cp >> 6));
+        out[1] = (char)(0x80 | (cp & 0x3F));
+        return 2;
     }
 
-    while (p < len) {
-        if (s[p] == ' ')
-            return 0;
-
-        if (!parse_product(
-                s + p,
-                len - p,
-                &n,
-                &term))
-        {
-            return 0;
-        }
-
-        if (n == 0)
-            return 0;
-
-        if (term > 0 &&
-            total > LLONG_MAX - term)
-        {
-            return 0;
-        }
-
-        if (term < 0 &&
-            total < LLONG_MIN - term)
-        {
-            return 0;
-        }
-
-        total += term;
-        p += n;
-        saw = 1;
-
-        if (p == len)
-            break;
-
-        if (s[p] != ' ')
-            return 0;
-
-        ++p;
-
-        if (p < len && s[p] == ' ')
-            return 0;
-    }
-
-    if (!saw)
+    if (cp >= 0xD800 && cp <= 0xDFFF)
         return 0;
 
-    *result = total;
-    return 1;
+    if (cp <= 0xFFFF) {
+        if (capacity < 3)
+            return 0;
+
+        out[0] = (char)(0xE0 | (cp >> 12));
+        out[1] = (char)(0x80 | ((cp >> 6) & 0x3F));
+        out[2] = (char)(0x80 | (cp & 0x3F));
+        return 3;
+    }
+
+    if (cp <= 0x10FFFF) {
+        if (capacity < 4)
+            return 0;
+
+        out[0] = (char)(0xF0 | (cp >> 18));
+        out[1] = (char)(0x80 | ((cp >> 12) & 0x3F));
+        out[2] = (char)(0x80 | ((cp >> 6) & 0x3F));
+        out[3] = (char)(0x80 | (cp & 0x3F));
+        return 4;
+    }
+
+    return 0;
 }
 
 /* ============================================================
- * CANONICAL INTEGER ENCODING
+ * MAPEO DE CARACTERES
+ *
+ * LATÍN:
+ * A-N = 1-14
+ * Ñ   = 15
+ * O-Z = 16-27
+ *
+ * GRIEGO:
+ * 28-51
+ *
+ * CIRÍLICO:
+ * 52-84
  * ============================================================ */
 
-static const char *canonical_small(int value)
+static int codepoint_to_number(uint32_t cp)
 {
-    switch (value) {
-        case 0:  return "<>";
-        case 1:  return ".";
-        case 2:  return ".,";
-        case 3:  return ",";
-        case 4:  return ",.";
-        case 5:  return ".,,";
-        case 6:  return ",,";
-        case 7:  return ",,.";
-        case 8:  return ".,,,";
-        case 9:  return ",,,";
-        case 10: return ",,,.";
-        default: return NULL;
-    }
-}
-
-static int encode_integer(
-    long long value,
-    char *out,
-    size_t cap
-)
-{
-    size_t pos = 0;
-    long long v;
-    const char *s;
-
-    if (out == NULL ||
-        cap == 0 ||
-        value < 0)
-    {
-        return 0;
-    }
-
-    out[0] = '\0';
-
-    if (value == 0)
-        return append_str(
-            out,
-            cap,
-            &pos,
-            "<>"
-        );
-
-    /*
-     * Established representation for 50.
-     */
-    if (value == 50)
-        return append_str(
-            out,
-            cap,
-            &pos,
-            ".,',,."
-        );
-
-    /*
-     * Established representation for 100.
-     */
-    if (value == 100)
-        return append_str(
-            out,
-            cap,
-            &pos,
-            ",,,.',,,."
-        );
-
-    v = value;
-
-    while (v >= 10) {
-        if (pos &&
-            !append_char(
-                out,
-                cap,
-                &pos,
-                ' '))
-        {
-            return 0;
-        }
-
-        if (!append_str(
-                out,
-                cap,
-                &pos,
-                ",,,."))
-        {
-            return 0;
-        }
-
-        v -= 10;
-    }
-
-    if (v > 0) {
-        s = canonical_small((int)v);
-
-        if (s == NULL)
-            return 0;
-
-        if (pos &&
-            !append_char(
-                out,
-                cap,
-                &pos,
-                ' '))
-        {
-            return 0;
-        }
-
-        if (!append_str(
-                out,
-                cap,
-                &pos,
-                s))
-        {
-            return 0;
-        }
-    }
-
-    return 1;
-}
-
-/* ============================================================
- * CHARACTER <-> CALAPH
- * ============================================================ */
-
-static int character_to_number(uint32_t cp)
-{
-    static const uint32_t greek[] = {
-        0x0391, 0x0392, 0x0393, 0x0394,
-        0x0395, 0x0396, 0x0397, 0x0398,
-        0x0399, 0x039A, 0x039B, 0x039C,
-        0x039D, 0x039E, 0x039F, 0x03A0,
-        0x03A1, 0x03A3, 0x03A4, 0x03A5,
-        0x03A6, 0x03A7, 0x03A8, 0x03A9
-    };
-
-    static const uint32_t greek_lower[] = {
-        0x03B1, 0x03B2, 0x03B3, 0x03B4,
-        0x03B5, 0x03B6, 0x03B7, 0x03B8,
-        0x03B9, 0x03BA, 0x03BB, 0x03BC,
-        0x03BD, 0x03BE, 0x03BF, 0x03C0,
-        0x03C1, 0x03C3, 0x03C4, 0x03C5,
-        0x03C6, 0x03C7, 0x03C8, 0x03C9
-    };
-
-    static const uint32_t cyr[] = {
-        0x0410, 0x0411, 0x0412, 0x0413,
-        0x0414, 0x0415, 0x0401, 0x0416,
-        0x0417, 0x0418, 0x0419, 0x041A,
-        0x041B, 0x041C, 0x041D, 0x041E,
-        0x041F, 0x0420, 0x0421, 0x0422,
-        0x0423, 0x0424, 0x0425, 0x0426,
-        0x0427, 0x0428, 0x0429, 0x042A,
-        0x042B, 0x042C, 0x042D, 0x042E,
-        0x042F
-    };
-
-    static const uint32_t cyr_lower[] = {
-        0x0430, 0x0431, 0x0432, 0x0433,
-        0x0434, 0x0435, 0x0451, 0x0436,
-        0x0437, 0x0438, 0x0439, 0x043A,
-        0x043B, 0x043C, 0x043D, 0x043E,
-        0x043F, 0x0440, 0x0441, 0x0442,
-        0x0443, 0x0444, 0x0445, 0x0446,
-        0x0447, 0x0448, 0x0449, 0x044A,
-        0x044B, 0x044C, 0x044D, 0x044E,
-        0x044F
-    };
-
-    size_t i;
+    /* ASCII latino */
 
     if (cp >= 'a' && cp <= 'z')
         cp -= ('a' - 'A');
@@ -670,1499 +228,894 @@ static int character_to_number(uint32_t cp)
     if (cp >= 'A' && cp <= 'N')
         return (int)(cp - 'A') + 1;
 
-    if (cp == 0x00D1 || cp == 0x00F1)
+    if (cp == 0xD1 || cp == 0xF1)
         return 15;
 
     if (cp >= 'O' && cp <= 'Z')
         return (int)(cp - 'O') + 16;
 
-    for (i = 0;
-         i < sizeof(greek) / sizeof(greek[0]);
-         ++i)
-    {
-        if (cp == greek[i] ||
-            cp == greek_lower[i])
-        {
-            return 28 + (int)i;
-        }
+    /*
+     * Ñ en UTF-8 ya llega decodificada como U+00D1.
+     */
+
+    if (cp == 0x00D1 || cp == 0x00F1)
+        return 15;
+
+    /* Griego mayúsculas */
+    switch (cp) {
+        case 0x0391: return 28; /* Α */
+        case 0x0392: return 29; /* Β */
+        case 0x0393: return 30; /* Γ */
+        case 0x0394: return 31; /* Δ */
+        case 0x0395: return 32; /* Ε */
+        case 0x0396: return 33; /* Ζ */
+        case 0x0397: return 34; /* Η */
+        case 0x0398: return 35; /* Θ */
+        case 0x0399: return 36; /* Ι */
+        case 0x039A: return 37; /* Κ */
+        case 0x039B: return 38; /* Λ */
+        case 0x039C: return 39; /* Μ */
+        case 0x039D: return 40; /* Ν */
+        case 0x039E: return 41; /* Ξ */
+        case 0x039F: return 42; /* Ο */
+        case 0x03A0: return 43; /* Π */
+        case 0x03A1: return 44; /* Ρ */
+        case 0x03A3: return 45; /* Σ */
+        case 0x03A4: return 46; /* Τ */
+        case 0x03A5: return 47; /* Υ */
+        case 0x03A6: return 48; /* Φ */
+        case 0x03A7: return 49; /* Χ */
+        case 0x03A8: return 50; /* Ψ */
+        case 0x03A9: return 51; /* Ω */
     }
 
-    for (i = 0;
-         i < sizeof(cyr) / sizeof(cyr[0]);
-         ++i)
-    {
-        if (cp == cyr[i] ||
-            cp == cyr_lower[i])
-        {
-            return 52 + (int)i;
-        }
+    /* Griego minúsculas */
+
+    switch (cp) {
+        case 0x03B1: return 28; /* α */
+        case 0x03B2: return 29; /* β */
+        case 0x03B3: return 30; /* γ */
+        case 0x03B4: return 31; /* δ */
+        case 0x03B5: return 32; /* ε */
+        case 0x03B6: return 33; /* ζ */
+        case 0x03B7: return 34; /* η */
+        case 0x03B8: return 35; /* θ */
+        case 0x03B9: return 36; /* ι */
+        case 0x03BA: return 37; /* κ */
+        case 0x03BB: return 38; /* λ */
+        case 0x03BC: return 39; /* μ */
+        case 0x03BD: return 40; /* ν */
+        case 0x03BE: return 41; /* ξ */
+        case 0x03BF: return 42; /* ο */
+        case 0x03C0: return 43; /* π */
+        case 0x03C1: return 44; /* ρ */
+        case 0x03C3: return 45; /* σ */
+        case 0x03C4: return 46; /* τ */
+        case 0x03C5: return 47; /* υ */
+        case 0x03C6: return 48; /* φ */
+        case 0x03C7: return 49; /* χ */
+        case 0x03C8: return 50; /* ψ */
+        case 0x03C9: return 51; /* ω */
+    }
+
+    /*
+     * CIRÍLICO.
+     *
+     * Se utiliza un orden estable de las letras rusas
+     * principales, más Ё.
+     */
+
+    switch (cp) {
+        case 0x0410: return 52; /* А */
+        case 0x0411: return 53; /* Б */
+        case 0x0412: return 54; /* В */
+        case 0x0413: return 55; /* Г */
+        case 0x0414: return 56; /* Д */
+        case 0x0415: return 57; /* Е */
+        case 0x0401: return 58; /* Ё */
+        case 0x0416: return 59; /* Ж */
+        case 0x0417: return 60; /* З */
+        case 0x0418: return 61; /* И */
+        case 0x0419: return 62; /* Й */
+        case 0x041A: return 63; /* К */
+        case 0x041B: return 64; /* Л */
+        case 0x041C: return 65; /* М */
+        case 0x041D: return 66; /* Н */
+        case 0x041E: return 67; /* О */
+        case 0x041F: return 68; /* П */
+        case 0x0420: return 69; /* Р */
+        case 0x0421: return 70; /* С */
+        case 0x0422: return 71; /* Т */
+        case 0x0423: return 72; /* У */
+        case 0x0424: return 73; /* Ф */
+        case 0x0425: return 74; /* Х */
+        case 0x0426: return 75; /* Ц */
+        case 0x0427: return 76; /* Ч */
+        case 0x0428: return 77; /* Ш */
+        case 0x0429: return 78; /* Щ */
+        case 0x042A: return 79; /* Ъ */
+        case 0x042B: return 80; /* Ы */
+        case 0x042C: return 81; /* Ь */
+        case 0x042D: return 82; /* Э */
+        case 0x042E: return 83; /* Ю */
+        case 0x042F: return 84; /* Я */
+    }
+
+    switch (cp) {
+        case 0x0430: return 52;
+        case 0x0431: return 53;
+        case 0x0432: return 54;
+        case 0x0433: return 55;
+        case 0x0434: return 56;
+        case 0x0435: return 57;
+        case 0x0451: return 58;
+        case 0x0436: return 59;
+        case 0x0437: return 60;
+        case 0x0438: return 61;
+        case 0x0439: return 62;
+        case 0x043A: return 63;
+        case 0x043B: return 64;
+        case 0x043C: return 65;
+        case 0x043D: return 66;
+        case 0x043E: return 67;
+        case 0x043F: return 68;
+        case 0x0440: return 69;
+        case 0x0441: return 70;
+        case 0x0442: return 71;
+        case 0x0443: return 72;
+        case 0x0444: return 73;
+        case 0x0445: return 74;
+        case 0x0446: return 75;
+        case 0x0447: return 76;
+        case 0x0448: return 77;
+        case 0x0449: return 78;
+        case 0x044A: return 79;
+        case 0x044B: return 80;
+        case 0x044C: return 81;
+        case 0x044D: return 82;
+        case 0x044E: return 83;
+        case 0x044F: return 84;
     }
 
     return -1;
 }
 
-static uint32_t number_to_codepoint(int n)
+static uint32_t number_to_codepoint(int number)
 {
-    static const uint32_t greek[] = {
-        0x0391, 0x0392, 0x0393, 0x0394,
-        0x0395, 0x0396, 0x0397, 0x0398,
-        0x0399, 0x039A, 0x039B, 0x039C,
-        0x039D, 0x039E, 0x039F, 0x03A0,
-        0x03A1, 0x03A3, 0x03A4, 0x03A5,
-        0x03A6, 0x03A7, 0x03A8, 0x03A9
-    };
+    if (number >= 1 && number <= 14)
+        return (uint32_t)('A' + number - 1);
 
-    static const uint32_t cyr[] = {
-        0x0410, 0x0411, 0x0412, 0x0413,
-        0x0414, 0x0415, 0x0401, 0x0416,
-        0x0417, 0x0418, 0x0419, 0x041A,
-        0x041B, 0x041C, 0x041D, 0x041E,
-        0x041F, 0x0420, 0x0421, 0x0422,
-        0x0423, 0x0424, 0x0425, 0x0426,
-        0x0427, 0x0428, 0x0429, 0x042A,
-        0x042B, 0x042C, 0x042D, 0x042E,
-        0x042F
-    };
-
-    if (n >= 1 && n <= 14)
-        return (uint32_t)('A' + n - 1);
-
-    if (n == 15)
+    if (number == 15)
         return 0x00D1;
 
-    if (n >= 16 && n <= 27)
-        return (uint32_t)('O' + n - 16);
+    if (number >= 16 && number <= 27)
+        return (uint32_t)('O' + number - 16);
 
-    if (n >= 28 && n <= 51)
-        return greek[n - 28];
+    switch (number) {
+        case 28: return 0x0391;
+        case 29: return 0x0392;
+        case 30: return 0x0393;
+        case 31: return 0x0394;
+        case 32: return 0x0395;
+        case 33: return 0x0396;
+        case 34: return 0x0397;
+        case 35: return 0x0398;
+        case 36: return 0x0399;
+        case 37: return 0x039A;
+        case 38: return 0x039B;
+        case 39: return 0x039C;
+        case 40: return 0x039D;
+        case 41: return 0x039E;
+        case 42: return 0x039F;
+        case 43: return 0x03A0;
+        case 44: return 0x03A1;
+        case 45: return 0x03A3;
+        case 46: return 0x03A4;
+        case 47: return 0x03A5;
+        case 48: return 0x03A6;
+        case 49: return 0x03A7;
+        case 50: return 0x03A8;
+        case 51: return 0x03A9;
 
-    if (n >= 52 && n <= 84)
-        return cyr[n - 52];
-
-    return 0;
-}
-
-/* ============================================================
- * UTF-8
- * ============================================================ */
-
-static int utf8_decode_one(
-    const unsigned char *s,
-    size_t len,
-    size_t *used,
-    uint32_t *cp
-)
-{
-    uint32_t x;
-
-    if (s == NULL ||
-        len == 0 ||
-        used == NULL ||
-        cp == NULL)
-    {
-        return 0;
-    }
-
-    if (s[0] < 0x80) {
-        *used = 1;
-        *cp = s[0];
-        return 1;
-    }
-
-    if ((s[0] & 0xE0) == 0xC0) {
-        if (len < 2 ||
-            (s[1] & 0xC0) != 0x80)
-        {
-            return 0;
-        }
-
-        x = ((uint32_t)(s[0] & 0x1F) << 6) |
-            (uint32_t)(s[1] & 0x3F);
-
-        if (x < 0x80)
-            return 0;
-
-        *used = 2;
-        *cp = x;
-
-        return 1;
-    }
-
-    if ((s[0] & 0xF0) == 0xE0) {
-        if (len < 3 ||
-            (s[1] & 0xC0) != 0x80 ||
-            (s[2] & 0xC0) != 0x80)
-        {
-            return 0;
-        }
-
-        x = ((uint32_t)(s[0] & 0x0F) << 12) |
-            ((uint32_t)(s[1] & 0x3F) << 6) |
-            (uint32_t)(s[2] & 0x3F);
-
-        if (x < 0x800 ||
-            (x >= 0xD800 && x <= 0xDFFF))
-        {
-            return 0;
-        }
-
-        *used = 3;
-        *cp = x;
-
-        return 1;
-    }
-
-    if ((s[0] & 0xF8) == 0xF0) {
-        if (len < 4 ||
-            (s[1] & 0xC0) != 0x80 ||
-            (s[2] & 0xC0) != 0x80 ||
-            (s[3] & 0xC0) != 0x80)
-        {
-            return 0;
-        }
-
-        x = ((uint32_t)(s[0] & 0x07) << 18) |
-            ((uint32_t)(s[1] & 0x3F) << 12) |
-            ((uint32_t)(s[2] & 0x3F) << 6) |
-            (uint32_t)(s[3] & 0x3F);
-
-        if (x < 0x10000 ||
-            x > 0x10FFFF)
-        {
-            return 0;
-        }
-
-        *used = 4;
-        *cp = x;
-
-        return 1;
-    }
-
-    return 0;
-}
-
-static int utf8_encode_one(
-    uint32_t cp,
-    char *out,
-    size_t cap,
-    size_t *used
-)
-{
-    if (out == NULL || used == NULL)
-        return 0;
-
-    if (cp <= 0x7F) {
-        if (cap < 1)
-            return 0;
-
-        out[0] = (char)cp;
-        *used = 1;
-        return 1;
-    }
-
-    if (cp <= 0x7FF) {
-        if (cap < 2)
-            return 0;
-
-        out[0] = (char)(0xC0 | (cp >> 6));
-        out[1] = (char)(0x80 | (cp & 0x3F));
-        *used = 2;
-
-        return 1;
-    }
-
-    if (cp <= 0xFFFF) {
-        if (cp >= 0xD800 &&
-            cp <= 0xDFFF)
-        {
-            return 0;
-        }
-
-        if (cap < 3)
-            return 0;
-
-        out[0] = (char)(0xE0 | (cp >> 12));
-        out[1] = (char)(0x80 | ((cp >> 6) & 0x3F));
-        out[2] = (char)(0x80 | (cp & 0x3F));
-        *used = 3;
-
-        return 1;
-    }
-
-    if (cp <= 0x10FFFF) {
-        if (cap < 4)
-            return 0;
-
-        out[0] = (char)(0xF0 | (cp >> 18));
-        out[1] = (char)(0x80 | ((cp >> 12) & 0x3F));
-        out[2] = (char)(0x80 | ((cp >> 6) & 0x3F));
-        out[3] = (char)(0x80 | (cp & 0x3F));
-        *used = 4;
-
-        return 1;
+        case 52: return 0x0410;
+        case 53: return 0x0411;
+        case 54: return 0x0412;
+        case 55: return 0x0413;
+        case 56: return 0x0414;
+        case 57: return 0x0415;
+        case 58: return 0x0401;
+        case 59: return 0x0416;
+        case 60: return 0x0417;
+        case 61: return 0x0418;
+        case 62: return 0x0419;
+        case 63: return 0x041A;
+        case 64: return 0x041B;
+        case 65: return 0x041C;
+        case 66: return 0x041D;
+        case 67: return 0x041E;
+        case 68: return 0x041F;
+        case 69: return 0x0420;
+        case 70: return 0x0421;
+        case 71: return 0x0422;
+        case 72: return 0x0423;
+        case 73: return 0x0424;
+        case 74: return 0x0425;
+        case 75: return 0x0426;
+        case 76: return 0x0427;
+        case 77: return 0x0428;
+        case 78: return 0x0429;
+        case 79: return 0x042A;
+        case 80: return 0x042B;
+        case 81: return 0x042C;
+        case 82: return 0x042D;
+        case 83: return 0x042E;
+        case 84: return 0x042F;
     }
 
     return 0;
 }
 
 /* ============================================================
- * CALAPH CHARACTER TOKENIZER
+ * CALAPH: REPRESENTACIÓN PRIMITIVA
+ *
+ * 0  = <>
+ * 1  = .
+ * 2  = .,
+ * 3  = ,
+ * 4  = ,.
+ * 5  = .,,
+ * 6  = ,,
+ * 7  = ,,.
+ * 8  = .,,,
+ * 9  = ,,,
+ * 10 = ,,,.
+ *
+ * IMPORTANTE:
+ * "." y "," son los únicos símbolos primitivos.
+ * Sus combinaciones son operaciones.
  * ============================================================ */
 
-static int next_char_token(
-    const char *s,
-    size_t len,
-    size_t *pos,
-    const char **token,
-    size_t *token_len
-)
+static int parse_symbol_expression(const char *s, size_t len)
 {
-    size_t p;
-    size_t start;
+    if (s == NULL || len == 0)
+        return -1;
 
-    if (s == NULL ||
-        pos == NULL ||
-        token == NULL ||
-        token_len == NULL)
-    {
+    if (len == 2 && s[0] == '<' && s[1] == '>')
         return 0;
+
+    size_t i;
+    int value = 0;
+    bool has_comma = false;
+    bool starts_dot = false;
+
+    for (i = 0; i < len; ++i) {
+        if (s[i] != '.' && s[i] != ',')
+            return -1;
+
+        if (s[i] == ',')
+            has_comma = true;
+
+        if (i == 0 && s[i] == '.')
+            starts_dot = true;
     }
 
-    p = *pos;
+    /*
+     * Solo puntos:
+     *
+     * .     = 1
+     * ..    = 2
+     * ...   = 3
+     * ....  = 4
+     * ...
+     */
 
-    while (p < len && s[p] == ' ')
-        ++p;
+    if (!has_comma) {
+        if (len > 1000)
+            return -1;
 
-    if (p >= len) {
-        *pos = p;
-        return 0;
+        return (int)len;
     }
 
-    start = p;
+    /*
+     * Solo comas:
+     *
+     * ,    = 3
+     * ,,   = 6
+     * ,,,  = 9
+     */
 
-    while (p < len) {
-        if (s[p] == ' ') {
-            size_t q = p;
+    if (!starts_dot) {
+        if (len > 1000)
+            return -1;
 
-            while (q < len && s[q] == ' ')
-                ++q;
-
-            if (q - p >= 2)
-                break;
-
-            ++p;
-            continue;
-        }
-
-        ++p;
+        return (int)(len * 3);
     }
 
-    *token = s + start;
-    *token_len = p - start;
+    /*
+     * Una expresión que comienza con "." y posteriormente
+     * contiene comas interpreta el primer "." como operación
+     * sustractiva:
+     *
+     * .,    = 3 - 1 = 2
+     * .,,   = 3 + 3 - 1 = 5
+     * .,,,  = 3 + 3 + 3 - 1 = 8
+     *
+     * Mientras que:
+     *
+     * ,.    = 3 + 1 = 4
+     * ,,.   = 3 + 3 + 1 = 7
+     * ,,,.  = 3 + 3 + 3 + 1 = 10
+     */
 
-    while (p < len && s[p] == ' ')
-        ++p;
+    value = -1;
 
-    *pos = p;
+    for (i = 1; i < len; ++i) {
+        if (s[i] == ',')
+            value += 3;
+        else
+            value += 1;
+    }
 
-    return *token_len > 0;
+    return value;
 }
 
 /* ============================================================
- * TEXT -> CALAPH
+ * EVALUADOR DE EXPRESIONES CALAPH
+ *
+ * Un espacio simple suma términos.
+ * La comilla simple multiplica.
+ *
+ * Ejemplo:
+ *
+ *   ,, .     -> 6 + 1 = 7
+ *
+ *   .',,.    -> 1 * 7
+ *
+ * Las representaciones especiales:
+ *
+ *   .,',,.       = 50
+ *   ,,,.',,,.    = 100
  * ============================================================ */
 
-static int text_to_calaph(
-    const char *text,
-    char *out,
-    size_t cap
-)
+static bool evaluate_term(const char *term, size_t len, long long *result)
+{
+    if (term == NULL || result == NULL || len == 0)
+        return false;
+
+    long long product = 1;
+    size_t start = 0;
+    size_t i;
+
+    for (i = 0; i <= len; ++i) {
+        if (i == len || term[i] == '\'') {
+            if (i == start)
+                return false;
+
+            int value = parse_symbol_expression(term + start, i - start);
+
+            if (value < 0)
+                return false;
+
+            product *= value;
+
+            if (product > 1000000000LL)
+                return false;
+
+            start = i + 1;
+        }
+    }
+
+    *result = product;
+    return true;
+}
+
+static bool evaluate_calaph(const char *expression, long long *result)
+{
+    if (expression == NULL || result == NULL)
+        return false;
+
+    if (strcmp(expression, ".,',,.") == 0) {
+        *result = 50;
+        return true;
+    }
+
+    if (strcmp(expression, ",,,.',,,.") == 0) {
+        *result = 100;
+        return true;
+    }
+
+    size_t len = strlen(expression);
+
+    if (len == 0)
+        return false;
+
+    long long total = 0;
+    size_t start = 0;
+    size_t i;
+
+    for (i = 0; i <= len; ++i) {
+        if (i == len || expression[i] == ' ') {
+            size_t term_len = i - start;
+
+            if (term_len == 0)
+                return false;
+
+            long long value;
+
+            if (!evaluate_term(expression + start, term_len, &value))
+                return false;
+
+            total += value;
+
+            if (total > 1000000000LL)
+                return false;
+
+            /*
+             * Dos espacios no pertenecen a una expresión.
+             * Dos espacios separan caracteres y son manejados
+             * por la función superior.
+             */
+            if (i < len && expression[i] == ' ' &&
+                i + 1 < len && expression[i + 1] == ' ')
+                return false;
+
+            start = i + 1;
+        }
+    }
+
+    *result = total;
+    return true;
+}
+
+/* ============================================================
+ * CODIFICACIÓN CANÓNICA DE ENTEROS
+ * ============================================================ */
+
+static bool append_text(char *out, size_t capacity, size_t *pos,
+                        const char *text)
 {
     size_t len;
-    size_t i = 0;
-    size_t pos = 0;
-    size_t used;
-    uint32_t cp;
-    int number;
-    char num[TOKEN_MAX];
 
-    if (text == NULL ||
-        out == NULL ||
-        cap == 0)
-    {
-        return 0;
-    }
+    if (out == NULL || pos == NULL || text == NULL)
+        return false;
 
     len = strlen(text);
-    out[0] = '\0';
 
-    while (i < len) {
-        if (!utf8_decode_one(
-                (const unsigned char *)(text + i),
-                len - i,
-                &used,
-                &cp))
-        {
-            return 0;
-        }
+    if (*pos + len >= capacity)
+        return false;
 
-        i += used;
+    memcpy(out + *pos, text, len);
+    *pos += len;
+    out[*pos] = '\0';
 
-        if (cp == ' ') {
-            if (pos &&
-                !append_str(
-                    out,
-                    cap,
-                    &pos,
-                    "  "))
-            {
-                return 0;
-            }
-
-            if (!append_char(
-                    out,
-                    cap,
-                    &pos,
-                    '/'))
-            {
-                return 0;
-            }
-
-            continue;
-        }
-
-        number = character_to_number(cp);
-
-        if (number < 1)
-            return 0;
-
-        if (!encode_integer(
-                number,
-                num,
-                sizeof(num)))
-        {
-            return 0;
-        }
-
-        if (pos &&
-            !append_str(
-                out,
-                cap,
-                &pos,
-                "  "))
-        {
-            return 0;
-        }
-
-        if (!append_str(
-                out,
-                cap,
-                &pos,
-                num))
-        {
-            return 0;
-        }
-    }
-
-    return 1;
+    return true;
 }
 
-/* ============================================================
- * CALAPH -> TEXT
- * ============================================================ */
-
-static int calaph_to_text(
-    const char *calaph,
-    char *out,
-    size_t cap
-)
+static bool append_char(char *out, size_t capacity, size_t *pos,
+                        char c)
 {
-    size_t len;
-    size_t p = 0;
-    size_t pos = 0;
-    size_t tlen;
-    const char *token;
-    long long value;
-    uint32_t cp;
-    char utf8[4];
-    size_t used;
+    if (out == NULL || pos == NULL)
+        return false;
 
-    if (calaph == NULL ||
-        out == NULL ||
-        cap == 0)
-    {
-        return 0;
-    }
+    if (*pos + 1 >= capacity)
+        return false;
 
-    len = strlen(calaph);
-    out[0] = '\0';
+    out[*pos] = c;
+    ++(*pos);
+    out[*pos] = '\0';
 
-    while (next_char_token(
-        calaph,
-        len,
-        &p,
-        &token,
-        &tlen))
-    {
-        if (tlen == 1 && token[0] == '/') {
-            if (!append_char(
-                    out,
-                    cap,
-                    &pos,
-                    ' '))
-            {
-                return 0;
-            }
-
-            continue;
-        }
-
-        if (!evaluate_calaph(
-                token,
-                tlen,
-                &value))
-        {
-            return 0;
-        }
-
-        if (value < 1 || value > 84)
-            return 0;
-
-        cp = number_to_codepoint((int)value);
-
-        if (!cp)
-            return 0;
-
-        if (!utf8_encode_one(
-                cp,
-                utf8,
-                sizeof(utf8),
-                &used))
-        {
-            return 0;
-        }
-
-        if (pos + used >= cap)
-            return 0;
-
-        memcpy(out + pos, utf8, used);
-        pos += used;
-        out[pos] = '\0';
-    }
-
-    return 1;
+    return true;
 }
 
-/* ============================================================
- * CALAPH -> BYTE VALUES
- * ============================================================ */
-
-static int calaph_to_values(
-    const char *calaph,
-    long long *values,
-    size_t max_values,
-    size_t *count
-)
+static bool encode_integer(long long number,
+                           char *out,
+                           size_t capacity)
 {
-    size_t len;
-    size_t p = 0;
-    size_t tlen;
-    const char *token;
-    long long value;
-
-    if (calaph == NULL ||
-        values == NULL ||
-        count == NULL)
-    {
-        return 0;
-    }
-
-    len = strlen(calaph);
-    *count = 0;
-
-    while (next_char_token(
-        calaph,
-        len,
-        &p,
-        &token,
-        &tlen))
-    {
-        if (tlen == 1 && token[0] == '/') {
-            value = 32;
-        } else {
-            if (!evaluate_calaph(
-                    token,
-                    tlen,
-                    &value))
-            {
-                return 0;
-            }
-        }
-
-        if (value < 0 || value > 255)
-            return 0;
-
-        if (*count >= max_values)
-            return 0;
-
-        values[*count] = value;
-        ++(*count);
-    }
-
-    return 1;
-}
-
-/* ============================================================
- * BINARY
- * ============================================================ */
-
-static int calaph_to_binary(
-    const char *calaph,
-    char *out,
-    size_t cap
-)
-{
-    long long values[INPUT_MAX];
-    size_t n;
-    size_t i;
-    size_t pos = 0;
-    int bit;
-
-    if (calaph == NULL ||
-        out == NULL ||
-        cap == 0)
-    {
-        return 0;
-    }
-
-    if (!calaph_to_values(
-            calaph,
-            values,
-            INPUT_MAX,
-            &n))
-    {
-        return 0;
-    }
+    if (out == NULL || capacity == 0 || number < 0)
+        return false;
 
     out[0] = '\0';
 
-    for (i = 0; i < n; ++i) {
-        if (i &&
-            !append_str(
-                out,
-                cap,
-                &pos,
-                "  "))
-        {
-            return 0;
-        }
+    if (number == 0)
+        return append_text(out, capacity, &(size_t){0}, "<>");
 
-        for (bit = 7; bit >= 0; --bit) {
-            if (!append_char(
-                    out,
-                    cap,
-                    &pos,
-                    (char)(
-                        '0' +
-                        ((values[i] >> bit) & 1)
-                    )))
-            {
-                return 0;
-            }
-        }
-    }
-
-    return 1;
-}
-
-static int binary_to_calaph(
-    const char *binary,
-    char *out,
-    size_t cap
-)
-{
-    size_t i = 0;
-    size_t pos = 0;
-    size_t len;
-    int bits = 0;
-    unsigned value = 0;
-    char num[TOKEN_MAX];
-
-    if (binary == NULL ||
-        out == NULL ||
-        cap == 0)
-    {
-        return 0;
-    }
-
-    len = strlen(binary);
-    out[0] = '\0';
-
-    while (i < len) {
-        if (binary[i] == ' ' ||
-            binary[i] == '\t')
-        {
-            ++i;
-            continue;
-        }
-
-        if (binary[i] != '0' &&
-            binary[i] != '1')
-        {
-            return 0;
-        }
-
-        value = (value << 1) |
-                (unsigned)(binary[i] - '0');
-
-        ++bits;
-        ++i;
-
-        if (bits == 8) {
-            if (!encode_integer(
-                    (long long)value,
-                    num,
-                    sizeof(num)))
-            {
-                return 0;
-            }
-
-            if (pos &&
-                !append_str(
-                    out,
-                    cap,
-                    &pos,
-                    "  "))
-            {
-                return 0;
-            }
-
-            if (!append_str(
-                    out,
-                    cap,
-                    &pos,
-                    num))
-            {
-                return 0;
-            }
-
-            bits = 0;
-            value = 0;
-        }
-    }
-
-    return bits == 0;
-}
-
-/* ============================================================
- * HEXADECIMAL
- * ============================================================ */
-
-static int hex_digit(char c)
-{
-    if (c >= '0' && c <= '9')
-        return c - '0';
-
-    if (c >= 'A' && c <= 'F')
-        return c - 'A' + 10;
-
-    if (c >= 'a' && c <= 'f')
-        return c - 'a' + 10;
-
-    return -1;
-}
-
-static int calaph_to_hex(
-    const char *calaph,
-    char *out,
-    size_t cap
-)
-{
-    long long values[INPUT_MAX];
-    size_t n;
-    size_t i;
-    size_t pos = 0;
-    const char *hex = "0123456789ABCDEF";
-
-    if (calaph == NULL ||
-        out == NULL ||
-        cap == 0)
-    {
-        return 0;
-    }
-
-    if (!calaph_to_values(
-            calaph,
-            values,
-            INPUT_MAX,
-            &n))
-    {
-        return 0;
-    }
-
-    out[0] = '\0';
-
-    for (i = 0; i < n; ++i) {
-        if (i &&
-            !append_str(
-                out,
-                cap,
-                &pos,
-                "  "))
-        {
-            return 0;
-        }
-
-        if (!append_char(
-                out,
-                cap,
-                &pos,
-                hex[(values[i] >> 4) & 0x0F]))
-        {
-            return 0;
-        }
-
-        if (!append_char(
-                out,
-                cap,
-                &pos,
-                hex[values[i] & 0x0F]))
-        {
-            return 0;
-        }
-    }
-
-    return 1;
-}
-
-static int hex_to_calaph(
-    const char *hexs,
-    char *out,
-    size_t cap
-)
-{
-    size_t i = 0;
-    size_t pos = 0;
-    size_t len;
-    int digits = 0;
-    int hi = 0;
-    int d;
-    unsigned value;
-    char num[TOKEN_MAX];
-
-    if (hexs == NULL ||
-        out == NULL ||
-        cap == 0)
-    {
-        return 0;
-    }
-
-    len = strlen(hexs);
-    out[0] = '\0';
-
-    while (i < len) {
-        if (isspace((unsigned char)hexs[i])) {
-            ++i;
-            continue;
-        }
-
-        d = hex_digit(hexs[i]);
-
-        if (d < 0)
-            return 0;
-
-        ++i;
-
-        if (digits == 0) {
-            hi = d;
-            digits = 1;
-        } else {
-            value = (unsigned)(hi * 16 + d);
-
-            if (!encode_integer(
-                    (long long)value,
-                    num,
-                    sizeof(num)))
-            {
-                return 0;
-            }
-
-            if (pos &&
-                !append_str(
-                    out,
-                    cap,
-                    &pos,
-                    "  "))
-            {
-                return 0;
-            }
-
-            if (!append_str(
-                    out,
-                    cap,
-                    &pos,
-                    num))
-            {
-                return 0;
-            }
-
-            digits = 0;
-        }
-    }
-
-    return digits == 0;
-}
-
-/* ============================================================
- * MORSE
- * ============================================================ */
-
-typedef struct {
-    char c;
-    const char *m;
-} Morse;
-
-static const Morse morse_table[] = {
-    {'A', ".-"},
-    {'B', "-..."},
-    {'C', "-.-."},
-    {'D', "-.."},
-    {'E', "."},
-    {'F', "..-."},
-    {'G', "--."},
-    {'H', "...."},
-    {'I', ".."},
-    {'J', ".---"},
-    {'K', "-.-"},
-    {'L', ".-.."},
-    {'M', "--"},
-    {'N', "-."},
-    {'O', "---"},
-    {'P', ".--."},
-    {'Q', "--.-"},
-    {'R', ".-."},
-    {'S', "..."},
-    {'T', "-"},
-    {'U', "..-"},
-    {'V', "...-"},
-    {'W', ".--"},
-    {'X', "-..-"},
-    {'Y', "-.--"},
-    {'Z', "--.."},
-
-    {'0', "-----"},
-    {'1', ".----"},
-    {'2', "..---"},
-    {'3', "...--"},
-    {'4', "....-"},
-    {'5', "....."},
-    {'6', "-...."},
-    {'7', "--..."},
-    {'8', "---.."},
-    {'9', "----."},
-
-    {'.', ".-.-.-"},
-    {',', "--..--"},
-    {'?', "..--.."},
-    {'!', "-.-.--"}
-};
-
-static const char *morse_for(char c)
-{
-    size_t i;
-
-    c = (char)toupper((unsigned char)c);
-
-    for (i = 0;
-         i < sizeof(morse_table) /
-             sizeof(morse_table[0]);
-         ++i)
-    {
-        if (morse_table[i].c == c)
-            return morse_table[i].m;
-    }
-
-    return NULL;
-}
-
-static char char_for_morse(const char *m)
-{
-    size_t i;
-
-    if (m == NULL)
-        return '\0';
-
-    for (i = 0;
-         i < sizeof(morse_table) /
-             sizeof(morse_table[0]);
-         ++i)
-    {
-        if (strcmp(
-                morse_table[i].m,
-                m) == 0)
-        {
-            return morse_table[i].c;
-        }
-    }
-
-    return '\0';
-}
-
-static int calaph_to_morse(
-    const char *calaph,
-    char *out,
-    size_t cap
-)
-{
-    size_t len;
-    size_t p = 0;
-    size_t pos = 0;
-    size_t tlen;
-    const char *token;
-    long long value;
-    const char *morse;
-
-    if (calaph == NULL ||
-        out == NULL ||
-        cap == 0)
-    {
-        return 0;
-    }
-
-    len = strlen(calaph);
-    out[0] = '\0';
-
-    while (next_char_token(
-        calaph,
-        len,
-        &p,
-        &token,
-        &tlen))
-    {
-        if (tlen == 1 && token[0] == '/') {
-            if (pos &&
-                !append_str(
-                    out,
-                    cap,
-                    &pos,
-                    " / "))
-            {
-                return 0;
-            }
-
-            continue;
-        }
-
-        if (!evaluate_calaph(
-                token,
-                tlen,
-                &value))
-        {
-            return 0;
-        }
-
-        if (value < 1 || value > 26)
-            return 0;
-
-        morse = morse_for(
-            (char)(
-                'A' +
-                (int)value -
-                1
-            )
-        );
-
-        if (morse == NULL)
-            return 0;
-
-        if (pos &&
-            !append_str(
-                out,
-                cap,
-                &pos,
-                "  "))
-        {
-            return 0;
-        }
-
-        if (!append_str(
-                out,
-                cap,
-                &pos,
-                morse))
-        {
-            return 0;
-        }
-    }
-
-    return 1;
-}
-
-static int morse_to_calaph(
-    const char *morse,
-    char *out,
-    size_t cap
-)
-{
-    char token[MORSE_MAX];
-    char num[TOKEN_MAX];
-
-    size_t i = 0;
-    size_t n;
     size_t pos = 0;
 
-    char c;
-    int number;
-
-    if (morse == NULL ||
-        out == NULL ||
-        cap == 0)
-    {
-        return 0;
+    /*
+     * Representación especial de 50.
+     */
+    if (number == 50) {
+        return append_text(out, capacity, &pos, ".,',,.");
     }
 
-    out[0] = '\0';
-
-    while (morse[i]) {
-        while (morse[i] == ' ' ||
-               morse[i] == '\t')
-        {
-            ++i;
-        }
-
-        if (!morse[i])
-            break;
-
-        if (morse[i] == '/') {
-            if (pos &&
-                !append_str(
-                    out,
-                    cap,
-                    &pos,
-                    "  "))
-            {
-                return 0;
-            }
-
-            if (!append_char(
-                    out,
-                    cap,
-                    &pos,
-                    '/'))
-            {
-                return 0;
-            }
-
-            ++i;
-            continue;
-        }
-
-        n = 0;
-
-        while (morse[i] &&
-               morse[i] != ' ' &&
-               morse[i] != '\t')
-        {
-            if (n + 1 >= sizeof(token))
-                return 0;
-
-            if (morse[i] != '.' &&
-                morse[i] != '-')
-            {
-                return 0;
-            }
-
-            token[n++] = morse[i++];
-        }
-
-        token[n] = '\0';
-
-        c = char_for_morse(token);
-
-        if (!c ||
-            c < 'A' ||
-            c > 'Z')
-        {
-            return 0;
-        }
-
-        number = c - 'A' + 1;
-
-        if (!encode_integer(
-                number,
-                num,
-                sizeof(num)))
-        {
-            return 0;
-        }
-
-        if (pos &&
-            !append_str(
-                out,
-                cap,
-                &pos,
-                "  "))
-        {
-            return 0;
-        }
-
-        if (!append_str(
-                out,
-                cap,
-                &pos,
-                num))
-        {
-            return 0;
-        }
+    /*
+     * Representación especial de 100.
+     */
+    if (number == 100) {
+        return append_text(out, capacity, &pos, ",,,.',,,.");
     }
 
-    return 1;
-}
+    /*
+     * 10 = ,,,
+     *
+     * Se utilizan grupos de 10 y después el residuo.
+     */
 
-/* ============================================================
- * USER INTERFACE
- * ============================================================ */
+    long long tens = number / 10;
+    int remainder = (int)(number % 10);
 
-static void logo(void)
-{
-    printf(
-        C_CYAN C_BOLD
-        "  ██████╗ █████╗ ██╗      █████╗ ██████╗ ██╗  ██╗\n"
-        " ██╔════╝██╔══██╗██║     ██╔══██╗██╔══██╗██║  ██║\n"
-        " ██║     ███████║██║     ███████║██████╔╝███████║\n"
-        " ██║     ██╔══██║██║     ██╔══██║██╔═══╝ ██╔══██║\n"
-        " ╚██████╗██║  ██║███████╗██║  ██║██║     ██║  ██║\n"
-        "  ╚═════╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝  ╚═╝\n"
-        C_RESET
-    );
-}
-
-static void header(const char *title)
-{
-    printf(
-        "\n%s%s============================================================%s\n",
-        C_BLUE,
-        C_BOLD,
-        C_RESET
-    );
-
-    printf(
-        "%s  %s%s\n",
-        C_MAGENTA,
-        title,
-        C_RESET
-    );
-
-    printf(
-        "%s============================================================%s\n",
-        C_BLUE,
-        C_RESET
-    );
-}
-
-static void main_header(void)
-{
-    logo();
-
-    printf(
-        "%sA mathematical symbolic text/code system%s\n",
-        C_YELLOW,
-        C_RESET
-    );
-}
-
-static void show_result(
-    const char *label,
-    const char *value
-)
-{
-    printf(
-        "\n%s%s%s\n%s%s%s\n",
-        C_GREEN,
-        label,
-        C_RESET,
-        C_BOLD,
-        value,
-        C_RESET
-    );
-}
-
-/* ============================================================
- * TEXT MENU
- * ============================================================ */
-
-static void text_menu(void)
-{
-    char input[INPUT_MAX];
-    char output[OUTPUT_MAX];
-    int option;
-
-    for (;;) {
-        header("WORK WITH TEXT");
-
-        printf("  1. Encrypt ordinary text -> Calaph\n");
-        printf("  2. Decrypt Calaph -> ordinary text\n");
-        printf("  0. Back\n\n");
-
-        if (!get_input(
-                "> ",
-                input,
-                sizeof(input)))
-        {
-            return;
+    for (long long i = 0; i < tens; ++i) {
+        if (i > 0) {
+            if (!append_char(out, capacity, &pos, ' '))
+                return false;
         }
 
-        if (!parse_menu_number(
-                input,
-                &option))
-        {
-            printf(
-                "%sInvalid input.%s\n",
-                C_RED,
-                C_RESET
-            );
-            continue;
-        }
-
-        if (option == 0)
-            return;
-
-        if (option == 1) {
-            if (!get_input(
-                    "Enter ordinary text: > ",
-                    input,
-                    sizeof(input)))
-            {
-                continue;
-            }
-
-            if (!text_to_calaph(
-                    input,
-                    output,
-                    sizeof(output)))
-            {
-                printf(
-                    "%sUnsupported character or output too large.%s\n",
-                    C_RED,
-                    C_RESET
-                );
-            } else {
-                show_result(
-                    "Calaph:",
-                    output
-                );
-            }
-
-        } else if (option == 2) {
-            if (!get_input(
-                    "Enter Calaph: > ",
-                    input,
-                    sizeof(input)))
-            {
-                continue;
-            }
-
-            if (!calaph_to_text(
-                    input,
-                    output,
-                    sizeof(output)))
-            {
-                printf(
-                    "%sInvalid Calaph expression or unsupported character.%s\n",
-                    C_RED,
-                    C_RESET
-                );
-            } else {
-                show_result(
-                    "Text:",
-                    output
-                );
-            }
-
-        } else {
-            printf(
-                "%sInvalid option.%s\n",
-                C_RED,
-                C_RESET
-            );
-        }
+        if (!append_text(out, capacity, &pos, ",,,."))
+            return false;
     }
-}
 
-/* ============================================================
- * CODE MENU
- * ============================================================ */
-
-static void code_menu(void)
-{
-    char input[INPUT_MAX];
-    char output[OUTPUT_MAX];
-    int option;
-
-    for (;;) {
-        header("WORK WITH CODES");
-
-        printf("  1. Calaph -> Binary\n");
-        printf("  2. Binary -> Calaph\n");
-        printf("  3. Calaph -> Hexadecimal\n");
-        printf("  4. Hexadecimal -> Calaph\n");
-        printf("  5. Calaph -> Morse (Latin A-Z)\n");
-        printf("  6. Morse -> Calaph (Latin A-Z)\n");
-        printf("  0. Back\n\n");
-
-        if (!get_input(
-                "> ",
-                input,
-                sizeof(input)))
-        {
-            return;
+    if (remainder > 0) {
+        if (tens > 0) {
+            if (!append_char(out, capacity, &pos, ' '))
+                return false;
         }
 
-        if (!parse_menu_number(
-                input,
-                &option))
-        {
-            printf(
-                "%sInvalid input.%s\n",
-                C_RED,
-                C_RESET
-            );
-            continue;
-        }
-
-        if (option == 0)
-            return;
-
-        if (!get_input(
-                "Enter code: > ",
-                input,
-                sizeof(input)))
-        {
-            continue;
-        }
-
-        switch (option) {
+        switch (remainder) {
             case 1:
-                if (calaph_to_binary(
-                        input,
-                        output,
-                        sizeof(output)))
-                {
-                    show_result(
-                        "Binary:",
-                        output
-                    );
-                } else {
-                    printf(
-                        "%sInvalid Calaph or value outside byte range.%s\n",
-                        C_RED,
-                        C_RESET
-                    );
-                }
+                if (!append_text(out, capacity, &pos, "."))
+                    return false;
                 break;
 
             case 2:
-                if (binary_to_calaph(
-                        input,
-                        output,
-                        sizeof(output)))
-                {
-                    show_result(
-                        "Calaph:",
-                        output
-                    );
-                } else {
-                    printf(
-                        "%sInvalid binary: use groups of 8 bits.%s\n",
-                        C_RED,
-                        C_RESET
-                    );
-                }
+                if (!append_text(out, capacity, &pos, ".,"))
+                    return false;
                 break;
 
             case 3:
-                if (calaph_to_hex(
-                        input,
-                        output,
-                        sizeof(output)))
-                {
-                    show_result(
-                        "Hexadecimal:",
-                        output
-                    );
-                } else {
-                    printf(
-                        "%sInvalid Calaph or value outside byte range.%s\n",
-                        C_RED,
-                        C_RESET
-                    );
-                }
+                if (!append_text(out, capacity, &pos, ","))
+                    return false;
                 break;
 
             case 4:
-                if (hex_to_calaph(
-                        input,
-                        output,
-                        sizeof(output)))
-                {
-                    show_result(
-                        "Calaph:",
-                        output
-                    );
-                } else {
-                    printf(
-                        "%sInvalid hexadecimal: use pairs of digits.%s\n",
-                        C_RED,
-                        C_RESET
-                    );
-                }
+                if (!append_text(out, capacity, &pos, ",."))
+                    return false;
                 break;
 
             case 5:
-                if (calaph_to_morse(
-                        input,
-                        output,
-                        sizeof(output)))
-                {
-                    show_result(
-                        "Morse:",
-                        output
-                    );
-                } else {
-                    printf(
-                        "%sMorse conversion currently supports Latin A-Z and spaces only.%s\n",
-                        C_RED,
-                        C_RESET
-                    );
-                }
+                if (!append_text(out, capacity, &pos, ".,,"))
+                    return false;
                 break;
 
             case 6:
-                if (morse_to_calaph(
-                        input,
-                        output,
-                        sizeof(output)))
-                {
-                    show_result(
-                        "Calaph:",
-                        output
-                    );
-                } else {
-                    printf(
-                        "%sInvalid Morse input.%s\n",
-                        C_RED,
-                        C_RESET
-                    );
-                }
+                if (!append_text(out, capacity, &pos, ",,"))
+                    return false;
                 break;
 
-            default:
-                printf(
-                    "%sInvalid option.%s\n",
-                    C_RED,
-                    C_RESET
-                );
+            case 7:
+                if (!append_text(out, capacity, &pos, ",,."))
+                    return false;
                 break;
+
+            case 8:
+                if (!append_text(out, capacity, &pos, ".,,,"))
+                    return false;
+                break;
+
+            case 9:
+                if (!append_text(out, capacity, &pos, ",,,"))
+                    return false;
+                break;
+        }
+    }
+
+    return true;
+}
+
+/* ============================================================
+ * TEXTO -> CALAPH
+ * ============================================================ */
+
+static bool text_to_calaph(const char *input,
+                           char *output,
+                           size_t capacity)
+{
+    if (input == NULL || output == NULL || capacity == 0)
+        return false;
+
+    output[0] = '\0';
+
+    size_t pos = 0;
+    size_t i = 0;
+    size_t input_len = strlen(input);
+    bool first_character = true;
+
+    while (i < input_len) {
+        uint32_t cp;
+        size_t consumed =
+            utf8_decode_one((const unsigned char *)(input + i),
+                            input_len - i,
+                            &cp);
+
+        if (consumed == 0)
+            return false;
+
+        i += consumed;
+
+        /*
+         * Espacio normal del texto.
+         *
+         * En Calaph el espacio entre palabras es "/".
+         */
+        if (cp == ' ') {
+            if (!append_text(output, capacity, &pos, "/"))
+                return false;
+
+            first_character = false;
+            continue;
+        }
+
+        int number = codepoint_to_number(cp);
+
+        if (number < 1 || number > 84)
+            return false;
+
+        char encoded[128];
+
+        if (!encode_integer(number,
+                            encoded,
+                            sizeof(encoded)))
+            return false;
+
+        if (!first_character) {
+            /*
+             * Dos espacios separan caracteres.
+             */
+            if (!append_text(output, capacity, &pos, "  "))
+                return false;
+        }
+
+        if (!append_text(output, capacity, &pos, encoded))
+            return false;
+
+        first_character = false;
+    }
+
+    return true;
+}
+
+/* ============================================================
+ * CALAPH -> TEXTO
+ * ============================================================ */
+
+static bool append_codepoint_utf8(char *output,
+                                  size_t capacity,
+                                  size_t *pos,
+                                  uint32_t cp)
+{
+    char buffer[4];
+
+    size_t count = utf8_encode_one(cp, buffer, sizeof(buffer));
+
+    if (count == 0)
+        return false;
+
+    if (*pos + count >= capacity)
+        return false;
+
+    memcpy(output + *pos, buffer, count);
+    *pos += count;
+    output[*pos] = '\0';
+
+    return true;
+}
+
+static bool calaph_to_text(const char *input,
+                           char *output,
+                           size_t capacity)
+{
+    if (input == NULL || output == NULL || capacity == 0)
+        return false;
+
+    output[0] = '\0';
+
+    size_t pos = 0;
+    size_t len = strlen(input);
+    size_t i = 0;
+
+    while (i < len) {
+
+        /*
+         * "/" representa un espacio ordinario.
+         */
+        if (input[i] == '/') {
+            if (!append_char(output, capacity, &pos, ' '))
+                return false;
+
+            ++i;
+
+            /*
+             * "/" debe estar separado como token.
+             */
+            if (i < len && input[i] != ' ')
+                return false;
+
+            while (i < len && input[i] == ' ')
+                ++i;
+
+            continue;
+        }
+
+        /*
+         * Saltar espacios que pudieran aparecer antes de
+         * un carácter.
+         */
+        while (i < len && input[i] == ' ')
+            ++i;
+
+        if (i >= len)
+            break;
+
+        /*
+         * Buscar el final del carácter Calaph.
+         *
+         * Dos espacios separan caracteres.
+         */
+        size_t start = i;
+
+        while (i < len) {
+            if (input[i] == ' ') {
+                if (i + 1 < len && input[i + 1] == ' ')
+                    break;
+            }
+
+            ++i;
+        }
+
+        size_t token_len = i - start;
+
+        if (token_len == 0)
+            return false;
+
+        char token[4096];
+
+        if (token_len >= sizeof(token))
+            return false;
+
+        memcpy(token, input + start, token_len);
+        token[token_len] = '\0';
+
+        long long number;
+
+        if (!evaluate_calaph(token, &number))
+            return false;
+
+        if (number < 1 || number > 84)
+            return false;
+
+        uint32_t cp = number_to_codepoint((int)number);
+
+        if (cp == 0)
+            return false;
+
+        if (!append_codepoint_utf8(output,
+                                   capacity,
+                                   &pos,
+                                   cp))
+            return false;
+
+        /*
+         * Saltar exactamente el separador de carácter.
+         */
+        if (i < len &&
+            input[i] == ' ' &&
+            i + 1 < len &&
+            input[i + 1] == ' ') {
+
+            i += 2;
+
+            /*
+             * Más espacios después del separador son inválidos.
+             */
+            if (i < len && input[i] == ' ')
+                return false;
+        }
+    }
+
+    return true;
+}
+
+/* ============================================================
+ * INTERFAZ
+ * ============================================================ */
+
+static void print_logo(void)
+{
+    printf("\n");
+    printf("   ██████╗ █████╗ ██╗      █████╗ ██████╗ ██╗  ██╗\n");
+    printf("  ██╔════╝██╔══██╗██║     ██╔══██╗██╔══██╗██║  ██║\n");
+    printf("  ██║     ███████║██║     ███████║██████╔╝███████║\n");
+    printf("  ██║     ██╔══██║██║     ██╔══██║██╔═══╝ ██╔══██║\n");
+    printf("  ╚██████╗██║  ██║███████╗██║  ██║██║     ██║  ██║\n");
+    printf("   ╚═════╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝  ╚═╝\n");
+    printf("\n");
+}
+
+static void print_header(const char *title)
+{
+    printf("\n");
+    printf("============================================================\n");
+    printf(" %s\n", title);
+    printf("============================================================\n");
+}
+
+static void encrypt_text_menu(void)
+{
+    char input[INPUT_SIZE];
+    char output[OUTPUT_SIZE];
+
+    print_header("ENCRYPT ORDINARY TEXT -> CALAPH");
+
+    printf("Enter ordinary text:\n> ");
+    read_line(input, sizeof(input));
+
+    if (input[0] == '\0') {
+        printf("\nError: empty input.\n");
+        return;
+    }
+
+    if (!text_to_calaph(input, output, sizeof(output))) {
+        printf("\nError: the text contains an unsupported character.\n");
+        return;
+    }
+
+    printf("\nCalaph:\n%s\n", output);
+}
+
+static void decrypt_text_menu(void)
+{
+    char input[INPUT_SIZE];
+    char output[OUTPUT_SIZE];
+
+    print_header("DECRYPT CALAPH -> ORDINARY TEXT");
+
+    printf("Enter Calaph text:\n> ");
+    read_line(input, sizeof(input));
+
+    if (input[0] == '\0') {
+        printf("\nError: empty input.\n");
+        return;
+    }
+
+    if (!calaph_to_text(input, output, sizeof(output))) {
+        printf("\nError: invalid Calaph expression.\n");
+        return;
+    }
+
+    printf("\nOrdinary text:\n%s\n", output);
+}
+
+static void text_menu(void)
+{
+    char choice[32];
+
+    for (;;) {
+        print_header("WORK WITH TEXT");
+
+        printf("1. Encrypt ordinary text -> Calaph\n");
+        printf("2. Decrypt Calaph -> ordinary text\n");
+        printf("0. Back\n");
+        printf("\n> ");
+
+        read_line(choice, sizeof(choice));
+
+        if (strcmp(choice, "1") == 0) {
+            encrypt_text_menu();
+        } else if (strcmp(choice, "2") == 0) {
+            decrypt_text_menu();
+        } else if (strcmp(choice, "0") == 0) {
+            return;
+        } else {
+            printf("\nInvalid option.\n");
         }
     }
 }
@@ -2173,59 +1126,24 @@ static void code_menu(void)
 
 int main(void)
 {
-    char input[INPUT_MAX];
-    int option;
+    char choice[32];
 
     for (;;) {
-        main_header();
+        print_logo();
 
-        header("MAIN MENU");
+        printf("1. Work with Text\n");
+        printf("0. Exit\n");
+        printf("\n> ");
 
-        printf("  1. Work with Text\n");
-        printf("  2. Work with Codes\n");
-        printf("  0. Exit\n\n");
+        read_line(choice, sizeof(choice));
 
-        if (!get_input(
-                "> ",
-                input,
-                sizeof(input)))
-        {
-            break;
-        }
-
-        if (!parse_menu_number(
-                input,
-                &option))
-        {
-            printf(
-                "%sInvalid input.%s\n",
-                C_RED,
-                C_RESET
-            );
-            continue;
-        }
-
-        if (option == 0)
-            break;
-
-        if (option == 1) {
+        if (strcmp(choice, "1") == 0) {
             text_menu();
-        } else if (option == 2) {
-            code_menu();
+        } else if (strcmp(choice, "0") == 0) {
+            printf("\nGoodbye.\n");
+            return 0;
         } else {
-            printf(
-                "%sInvalid option.%s\n",
-                C_RED,
-                C_RESET
-            );
+            printf("\nInvalid option.\n");
         }
     }
-
-    printf(
-        "%sGoodbye.%s\n",
-        C_GREEN,
-        C_RESET
-    );
-
-    return 0;
 }
