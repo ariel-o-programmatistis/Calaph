@@ -1,737 +1,66 @@
 #!/usr/bin/env bash
 
 # ============================================================
-#                            CALAPH
-#              SYMBOLIC CONVERSION SYSTEM
+# CALAPH
+# Numerical Language System
+# Bash implementation
 # ============================================================
 
-# Supported conversions:
-#
-#     Calaph <-> Morse
-#     Calaph <-> Hexadecimal
-#     Calaph <-> Binary
-#
-# Calaph numerical primitives:
-#
-#     .      = 1
-#     ,      = 3
-#     <>     = 0
-#
-# Arithmetic:
-#
-#     '      = multiplication
-#     space  = addition
-#
-# Decimal notation:
-#
-#     |      = decimal separator
-#     \      = separator between decimal digits
-#
-# Examples:
-#
-#     .       = 1
-#     ,.      = 4
-#     ,',     = 9
-#     .,,     = 5
-#     .,',,.  = 50
-#
-#     ,|.\,.  = 3.14
-#     <>      = 0
-
-
-# ============================================================
-#                         TERMINAL COLORS
-# ============================================================
+# -------------------- ANSI COLORS --------------------
 
 RESET='\033[0m'
 BOLD='\033[1m'
 DIM='\033[2m'
-CYAN='\033[36m'
-BLUE='\033[34m'
-MAGENTA='\033[35m'
-WHITE='\033[37m'
+
+BLACK='\033[30m'
+RED='\033[31m'
 GREEN='\033[32m'
 YELLOW='\033[33m'
-RED='\033[31m'
-
+BLUE='\033[34m'
+MAGENTA='\033[35m'
+CYAN='\033[36m'
+WHITE='\033[37m'
 
 # ============================================================
-#                         GENERAL UTILITIES
+# TERMINAL UTILITIES
 # ============================================================
 
 clear_screen() {
     printf '\033[2J\033[H'
 }
 
-pause_program() {
-    printf "\n${DIM}Press ENTER to continue...${RESET}"
+pause_screen() {
+    printf '\n'
+    printf "${DIM}  Press ENTER to continue...${RESET}"
     read -r
 }
 
-trim_newline() {
-    local value="$1"
-    value="${value//$'\r'/}"
-    value="${value//$'\n'/}"
-    printf '%s' "$value"
+line() {
+    printf "${CYAN}  ──────────────────────────────────────────────────────────${RESET}\n"
 }
 
-
-# ============================================================
-#                       CALAPH NUMBER SYSTEM
-# ============================================================
-
-parse_primitive() {
-
-    local str="$1"
-    local value=0
-    local char
-
-    if [[ "$str" == "<>" ]]; then
-        echo 0
-        return
-    fi
-
-    while [[ -n "$str" ]]; do
-
-        char="${str:0:1}"
-        str="${str:1}"
-
-        case "$char" in
-
-            ".")
-                ((value += 1))
-                ;;
-
-            ",")
-                ((value += 3))
-                ;;
-
-            *)
-                echo "-1"
-                return
-                ;;
-
-        esac
-    done
-
-    echo "$value"
+double_line() {
+    printf "${CYAN}  ══════════════════════════════════════════════════════════${RESET}\n"
 }
 
-
-# ============================================================
-#                      MULTIPLICATION PARSER
-# ============================================================
-
-parse_product() {
-
-    local str="$1"
-    local left
-    local right
-    local a
-    local b
-
-    if [[ "$str" != *"'"* ]]; then
-        parse_primitive "$str"
-        return
-    fi
-
-    # Only one multiplication operator is valid.
-
-    if [[ "$str" == *"'"*"'"* ]]; then
-        echo "-1"
-        return
-    fi
-
-    left="${str%%\'*}"
-    right="${str#*\'*}"
-
-    if [[ -z "$left" || -z "$right" ]]; then
-        echo "-1"
-        return
-    fi
-
-    a=$(parse_primitive "$left")
-    b=$(parse_primitive "$right")
-
-    if (( a < 0 || b < 0 )); then
-        echo "-1"
-        return
-    fi
-
-    echo $((a * b))
+top_border() {
+    printf "${CYAN}  ╔══════════════════════════════════════════════════════════╗${RESET}\n"
 }
 
-
-# ============================================================
-#                    FULL CALAPH EXPRESSION
-# ============================================================
-
-evaluate_calaph() {
-
-    local input="$1"
-    local token
-    local value
-    local total=0
-
-    read -ra tokens <<< "$input"
-
-    for token in "${tokens[@]}"; do
-
-        value=$(parse_product "$token")
-
-        if (( value < 0 )); then
-            echo "-1"
-            return
-        fi
-
-        ((total += value))
-    done
-
-    echo "$total"
+middle_border() {
+    printf "${CYAN}  ╠══════════════════════════════════════════════════════════╣${RESET}\n"
 }
 
-
-# ============================================================
-#                   INTEGER -> CALAPH
-# ============================================================
-
-primitive_for_number() {
-
-    case "$1" in
-
-        0)  echo "<>" ;;
-        1)  echo "." ;;
-        2)  echo ".," ;;
-        3)  echo "," ;;
-        4)  echo ",." ;;
-        5)  echo ".,," ;;
-        6)  echo ",," ;;
-        7)  echo ",,." ;;
-        8)  echo ".,,," ;;
-        9)  echo ",,," ;;
-        10) echo ",,,." ;;
-
-        *)
-            return 1
-            ;;
-
-    esac
+bottom_border() {
+    printf "${CYAN}  ╚══════════════════════════════════════════════════════════╝${RESET}\n"
 }
 
-
-encode_integer() {
-
-    local value="$1"
-    local remaining
-    local multiplier
-    local first=1
-    local output=""
-
-    if (( value == 0 )); then
-        echo "<>"
-        return
-    fi
-
-    if (( value <= 10 )); then
-        primitive_for_number "$value"
-        return
-    fi
-
-    # Preferred representation for 50.
-
-    if (( value == 50 )); then
-        echo ".,',,."
-        return
-    fi
-
-    # Multiplication by 10.
-
-    if (( value >= 20 && value % 10 == 0 )); then
-
-        multiplier=$((value / 10))
-
-        if (( multiplier <= 10 )); then
-
-            printf "%s'%s\n" \
-                "$(primitive_for_number "$multiplier")" \
-                "$(primitive_for_number 10)"
-
-            return
-        fi
-    fi
-
-    # Multiplication by 3.
-
-    if (( value >= 12 && value % 3 == 0 )); then
-
-        multiplier=$((value / 3))
-
-        if (( multiplier <= 10 )); then
-
-            printf "%s'%s\n" \
-                "$(primitive_for_number "$multiplier")" \
-                "$(primitive_for_number 3)"
-
-            return
-        fi
-    fi
-
-    # Fallback: sum of 3s and 1s.
-
-    remaining="$value"
-
-    while (( remaining >= 3 )); do
-
-        if (( first == 0 )); then
-            output+=" "
-        fi
-
-        output+=","
-
-        remaining=$((remaining - 3))
-        first=0
-    done
-
-    if (( remaining == 1 )); then
-
-        if (( first == 0 )); then
-            output+=" "
-        fi
-
-        output+="."
-    fi
-
-    echo "$output"
-}
-
-
 # ============================================================
-#                         MORSE TABLE
+# LOGO
 # ============================================================
 
-morse_encode() {
-
-    case "${1^^}" in
-
-        A) echo ".-" ;;
-        B) echo "-..." ;;
-        C) echo "-.-." ;;
-        D) echo "-.." ;;
-        E) echo "." ;;
-        F) echo "..-." ;;
-        G) echo "--." ;;
-        H) echo "...." ;;
-        I) echo ".." ;;
-        J) echo ".---" ;;
-        K) echo "-.-" ;;
-        L) echo ".-.." ;;
-        M) echo "--" ;;
-        N) echo "-." ;;
-        O) echo "---" ;;
-        P) echo ".--." ;;
-        Q) echo "--.-" ;;
-        R) echo ".-." ;;
-        S) echo "..." ;;
-        T) echo "-" ;;
-        U) echo "..-" ;;
-        V) echo "...-" ;;
-        W) echo ".--" ;;
-        X) echo "-..-" ;;
-        Y) echo "-.--" ;;
-        Z) echo "--.." ;;
-
-        0) echo "-----" ;;
-        1) echo ".----" ;;
-        2) echo "..---" ;;
-        3) echo "...--" ;;
-        4) echo "....-" ;;
-        5) echo "....." ;;
-        6) echo "-...." ;;
-        7) echo "--..." ;;
-        8) echo "---.." ;;
-        9) echo "----." ;;
-
-        ".") echo ".-.-.-" ;;
-        ",") echo "--..--" ;;
-        "?") echo "..--.." ;;
-        "!") echo "-.-.--" ;;
-        "/") echo "-..-." ;;
-        "(") echo "-.--." ;;
-        ")") echo "-.--.-" ;;
-        "&") echo ".-..." ;;
-        ":") echo "---..." ;;
-        ";") echo "-.-.-." ;;
-        "=") echo "-...-" ;;
-        "+") echo ".-.-." ;;
-        "-") echo "-....-" ;;
-        "_") echo "..--.-" ;;
-        '"') echo ".-..-." ;;
-        "\$") echo "...-..-" ;;
-        "@") echo ".--.-." ;;
-
-        *)
-            return 1
-            ;;
-
-    esac
-}
-
-
-morse_decode() {
-
-    case "$1" in
-
-        ".-") echo "A" ;;
-        "-...") echo "B" ;;
-        "-.-.") echo "C" ;;
-        "-..") echo "D" ;;
-        ".") echo "E" ;;
-        "..-.") echo "F" ;;
-        "--.") echo "G" ;;
-        "....") echo "H" ;;
-        "..") echo "I" ;;
-        ".---") echo "J" ;;
-        "-.-") echo "K" ;;
-        ".-..") echo "L" ;;
-        "--") echo "M" ;;
-        "-.") echo "N" ;;
-        "---") echo "O" ;;
-        ".--.") echo "P" ;;
-        "--.-") echo "Q" ;;
-        ".-.") echo "R" ;;
-        "...") echo "S" ;;
-        "-") echo "T" ;;
-        "..-") echo "U" ;;
-        "...-") echo "V" ;;
-        ".--") echo "W" ;;
-        "-..-") echo "X" ;;
-        "-.--") echo "Y" ;;
-        "--..") echo "Z" ;;
-
-        "-----") echo "0" ;;
-        ".----") echo "1" ;;
-        "..---") echo "2" ;;
-        "...--") echo "3" ;;
-        "....-") echo "4" ;;
-        ".....") echo "5" ;;
-        "-....") echo "6" ;;
-        "--...") echo "7" ;;
-        "---..") echo "8" ;;
-        "----.") echo "9" ;;
-
-        ".-.-.-") echo "." ;;
-        "--..--") echo "," ;;
-        "..--..") echo "?" ;;
-        "-.-.--") echo "!" ;;
-        "-..-.") echo "/" ;;
-        "-.--.") echo "(" ;;
-        "-.--.-") echo ")" ;;
-        ".-...") echo "&" ;;
-        "---...") echo ":" ;;
-        "-.-.-.") echo ";" ;;
-        "-...-") echo "=" ;;
-        ".-.-.") echo "+" ;;
-        "-....-") echo "-" ;;
-        "..--.-") echo "_" ;;
-        ".-..-.") echo '"' ;;
-        "...-..-") echo '$' ;;
-        ".--.-.") echo "@" ;;
-
-        *)
-            return 1
-            ;;
-
-    esac
-}
-
-
-# ============================================================
-#                      CALAPH -> MORSE
-# ============================================================
-
-calaph_to_morse() {
-
-    local input="$1"
-    local token
-    local value
-    local character
-    local morse
-    local output=""
-    local first=1
-
-    read -ra tokens <<< "$input"
-
-    for token in "${tokens[@]}"; do
-
-        value=$(evaluate_calaph "$token")
-
-        if (( value < 0 || value > 255 )); then
-            printf "${RED}Invalid Calaph value.${RESET}\n"
-            return
-        fi
-
-        character=$(printf "\\$(printf '%03o' "$value")")
-
-        morse=$(morse_encode "$character")
-
-        if [[ -z "$morse" ]]; then
-            morse="[unsupported]"
-        fi
-
-        if (( first == 0 )); then
-            output+=" "
-        fi
-
-        output+="$morse"
-        first=0
-    done
-
-    printf "\n${CYAN}Morse:${RESET}\n\n%s\n" "$output"
-}
-
-
-# ============================================================
-#                      MORSE -> CALAPH
-# ============================================================
-
-morse_to_calaph() {
-
-    local input="$1"
-    local word
-    local code
-    local character
-    local value
-    local encoded
-    local first_word=1
-    local first_char
-
-    printf "\n${CYAN}Calaph:${RESET}\n\n"
-
-    IFS='/' read -ra words <<< "$input"
-
-    for word in "${words[@]}"; do
-
-        if (( first_word == 0 )); then
-            printf "  "
-        fi
-
-        first_word=0
-        first_char=1
-
-        read -ra codes <<< "$word"
-
-        for code in "${codes[@]}"; do
-
-            character=$(morse_decode "$code")
-
-            if [[ -z "$character" ]]; then
-                printf "${RED}<?>${RESET}"
-                continue
-            fi
-
-            printf -v value '%d' "'$character"
-
-            encoded=$(encode_integer "$value")
-
-            if (( first_char == 0 )); then
-                printf " "
-            fi
-
-            printf "%s" "$encoded"
-
-            first_char=0
-        done
-    done
-
-    printf "\n"
-}
-
-
-# ============================================================
-#                      CALAPH -> HEX
-# ============================================================
-
-calaph_to_hex() {
-
-    local input="$1"
-    local token
-    local value
-
-    printf "\n${CYAN}Hexadecimal:${RESET}\n\n"
-
-    read -ra tokens <<< "$input"
-
-    for token in "${tokens[@]}"; do
-
-        value=$(evaluate_calaph "$token")
-
-        if (( value < 0 )); then
-            printf "${RED}Invalid Calaph expression.${RESET}\n"
-            return
-        fi
-
-        if (( value > 255 )); then
-            printf "${RED}Value exceeds one byte: %d${RESET}\n" "$value"
-            return
-        fi
-
-        printf "%02X" "$value"
-    done
-
-    printf "\n"
-}
-
-
-# ============================================================
-#                      HEX -> CALAPH
-# ============================================================
-
-hex_to_calaph() {
-
-    local input="$1"
-    local clean=""
-    local char
-    local value
-    local encoded
-
-    for ((i = 0; i < ${#input}; i++)); do
-
-        char="${input:i:1}"
-
-        if [[ "$char" =~ [[:xdigit:]] ]]; then
-            clean+="$char"
-
-        elif [[ "$char" =~ [[:space:]] ]]; then
-            continue
-
-        else
-            printf "${RED}Invalid hexadecimal data.${RESET}\n"
-            return
-        fi
-    done
-
-    if (( ${#clean} == 0 || ${#clean} % 2 != 0 )); then
-        printf "${RED}Hexadecimal must contain complete bytes.${RESET}\n"
-        return
-    fi
-
-    printf "\n${CYAN}Calaph:${RESET}\n\n"
-
-    for ((i = 0; i < ${#clean}; i += 2)); do
-
-        char="${clean:i:2}"
-
-        value=$((16#$char))
-
-        encoded=$(encode_integer "$value")
-
-        if (( i > 0 )); then
-            printf " "
-        fi
-
-        printf "%s" "$encoded"
-    done
-
-    printf "\n"
-}
-
-
-# ============================================================
-#                      CALAPH -> BINARY
-# ============================================================
-
-calaph_to_binary() {
-
-    local input="$1"
-    local token
-    local value
-
-    printf "\n${CYAN}Binary:${RESET}\n\n"
-
-    read -ra tokens <<< "$input"
-
-    for token in "${tokens[@]}"; do
-
-        value=$(evaluate_calaph "$token")
-
-        if (( value < 0 )); then
-            printf "${RED}Invalid Calaph expression.${RESET}\n"
-            return
-        fi
-
-        if (( value > 255 )); then
-            printf "${RED}Value exceeds one byte: %d${RESET}\n" "$value"
-            return
-        fi
-
-        printf "%08d" "$(echo "obase=2; $value" | bc)"
-    done
-
-    printf "\n"
-}
-
-
-# ============================================================
-#                      BINARY -> CALAPH
-# ============================================================
-
-binary_to_calaph() {
-
-    local input="$1"
-    local clean=""
-    local char
-    local value
-    local encoded
-
-    for ((i = 0; i < ${#input}; i++)); do
-
-        char="${input:i:1}"
-
-        if [[ "$char" == "0" || "$char" == "1" ]]; then
-            clean+="$char"
-
-        elif [[ "$char" =~ [[:space:]] ]]; then
-            continue
-
-        else
-            printf "${RED}Invalid binary data.${RESET}\n"
-            return
-        fi
-    done
-
-    if (( ${#clean} == 0 || ${#clean} % 8 != 0 )); then
-        printf "${RED}Binary must contain complete 8-bit bytes.${RESET}\n"
-        return
-    fi
-
-    printf "\n${CYAN}Calaph:${RESET}\n\n"
-
-    for ((i = 0; i < ${#clean}; i += 8)); do
-
-        char="${clean:i:8}"
-
-        value=$((2#$char))
-
-        encoded=$(encode_integer "$value")
-
-        if (( i > 0 )); then
-            printf " "
-        fi
-
-        printf "%s" "$encoded"
-    done
-
-    printf "\n"
-}
-
-
-# ============================================================
-#                           LOGO
-# ============================================================
-
-print_logo() {
-
-    printf "${CYAN}"
+logo() {
+    printf "${CYAN}${BOLD}"
     printf '   ██████╗ █████╗ ██╗      █████╗ ██████╗ ██╗  ██╗\n'
     printf '  ██╔════╝██╔══██╗██║     ██╔══██╗██╔══██╗██║  ██║\n'
     printf '  ██║     ███████║██║     ███████║██████╔╝███████║\n'
@@ -740,141 +69,1305 @@ print_logo() {
     printf '   ╚═════╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝  ╚═╝\n'
     printf "${RESET}"
 
-    printf "\n${BOLD}Symbolic Conversion System${RESET}\n\n"
+    printf "${DIM}"
+    printf '                 NUMERICAL LANGUAGE SYSTEM\n'
+    printf '                            v1.0\n'
+    printf "${RESET}"
 }
 
-
 # ============================================================
-#                           MENU
-# ============================================================
-
-print_menu() {
-
-    printf "${YELLOW}1.${RESET}  Calaph -> Morse\n"
-    printf "${YELLOW}2.${RESET}  Morse -> Calaph\n"
-    printf "${YELLOW}3.${RESET}  Calaph -> Hexadecimal\n"
-    printf "${YELLOW}4.${RESET}  Hexadecimal -> Calaph\n"
-    printf "${YELLOW}5.${RESET}  Calaph -> Binary\n"
-    printf "${YELLOW}6.${RESET}  Binary -> Calaph\n"
-    printf "${YELLOW}0.${RESET}  Exit\n"
-
-    printf "\n"
-}
-
-
-# ============================================================
-#                            MAIN
+# HEADERS
 # ============================================================
 
-while true; do
+header() {
+    local section="$1"
+    local operation="$2"
 
     clear_screen
 
-    print_logo
-    print_menu
+    printf '\n'
 
-    printf "${GREEN}Select:${RESET} "
-    read -r choice
+    top_border
 
-    case "$choice" in
+    printf "${CYAN}  ║${RESET}  ${BOLD}CALAPH${RESET}${DIM} / ${RESET}${MAGENTA}%s${RESET}${DIM} / ${RESET}${WHITE}%s${RESET}\n" \
+        "$section" "$operation"
 
-        1)
+    middle_border
 
-            clear_screen
-            print_logo
+    printf "${CYAN}  ║${RESET}  ${DIM}Numerical Language System${RESET}\n"
 
-            printf "${GREEN}Enter Calaph:${RESET}\n> "
-            read -r input
+    bottom_border
 
-            calaph_to_morse "$input"
+    printf '\n'
+}
 
-            pause_program
-            ;;
+main_header() {
+    clear_screen
 
-        2)
+    printf '\n'
 
-            clear_screen
-            print_logo
+    top_border
 
-            printf "${GREEN}Enter Morse:${RESET}\n"
-            printf "${DIM}Use spaces between characters and / between words.${RESET}\n> "
-            read -r input
+    printf "${CYAN}  ║${RESET}                                                          ${CYAN}║${RESET}\n"
 
-            morse_to_calaph "$input"
+    printf "${CYAN}  ║${RESET}                     ${BOLD}${CYAN}C A L A P H${RESET}                        ${CYAN}║${RESET}\n"
 
-            pause_program
-            ;;
+    printf "${CYAN}  ║${RESET}                                                          ${CYAN}║${RESET}\n"
 
-        3)
+    middle_border
 
-            clear_screen
-            print_logo
+    printf "${CYAN}  ║${RESET}              ${DIM}NUMERICAL LANGUAGE SYSTEM${RESET}                 ${CYAN}║${RESET}\n"
 
-            printf "${GREEN}Enter Calaph:${RESET}\n> "
-            read -r input
+    printf "${CYAN}  ║${RESET}                         ${DIM}v1.0${RESET}                         ${CYAN}║${RESET}\n"
 
-            calaph_to_hex "$input"
+    middle_border
 
-            pause_program
-            ;;
+    printf "${CYAN}  ║${RESET}                                                          ${CYAN}║${RESET}\n"
 
-        4)
+    printf "${CYAN}  ║${RESET}   ${DIM}A language based on numerical structure and symbols.${RESET}  ${CYAN}║${RESET}\n"
 
-            clear_screen
-            print_logo
+    printf "${CYAN}  ║${RESET}                                                          ${CYAN}║${RESET}\n"
 
-            printf "${GREEN}Enter hexadecimal:${RESET}\n> "
-            read -r input
+    bottom_border
 
-            hex_to_calaph "$input"
+    printf '\n'
+}
 
-            pause_program
-            ;;
+# ============================================================
+# CALAPH PRIMITIVES
+# ============================================================
 
-        5)
+primitive_for_number() {
+    case "$1" in
+        0)  printf '<>' ;;
+        1)  printf '.' ;;
+        2)  printf '.,' ;;
+        3)  printf ',' ;;
+        4)  printf ',.' ;;
+        5)  printf '.,,' ;;
+        6)  printf ',,' ;;
+        7)  printf ',,.' ;;
+        8)  printf '.,,,' ;;
+        9)  printf ',,,' ;;
+        10) printf ',,,.' ;;
+        *)  return 1 ;;
+    esac
+}
 
-            clear_screen
-            print_logo
+# ============================================================
+# CALAPH PARSER
+# ============================================================
 
-            printf "${GREEN}Enter Calaph:${RESET}\n> "
-            read -r input
+parse_primitive() {
+    local s="$1"
 
-            calaph_to_binary "$input"
+    if [[ "$s" == "<>" ]]; then
+        printf '0'
+        return 0
+    fi
 
-            pause_program
-            ;;
+    local value=0
+    local char
 
-        6)
+    for ((i=0; i<${#s}; i++)); do
 
-            clear_screen
-            print_logo
+        char="${s:i:1}"
 
-            printf "${GREEN}Enter binary:${RESET}\n> "
-            read -r input
+        case "$char" in
+            '.')
+                ((value+=1))
+                ;;
+            ',')
+                ((value+=3))
+                ;;
+            *)
+                return 1
+                ;;
+        esac
 
-            binary_to_calaph "$input"
+    done
 
-            pause_program
-            ;;
+    printf '%d' "$value"
+}
 
-        0)
+parse_product() {
+    local s="$1"
 
-            clear_screen
+    local apostrophe_count
+    apostrophe_count=$(grep -o "'" <<< "$s" | wc -l)
 
-            printf "${CYAN}Calaph terminated.${RESET}\n"
+    if ((apostrophe_count > 1)); then
+        return 1
+    fi
 
-            exit 0
-            ;;
+    if [[ "$s" != *"'"* ]]; then
+        parse_primitive "$s"
+        return $?
+    fi
+
+    local left="${s%%\'*}"
+    local right="${s#*\'"
+
+    [[ -z "$left" || -z "$right" ]] && return 1
+
+    local left_value
+    local right_value
+
+    left_value=$(parse_primitive "$left") || return 1
+    right_value=$(parse_primitive "$right") || return 1
+
+    printf '%d' "$((left_value * right_value))"
+}
+
+evaluate_calaph() {
+    local expression="$1"
+    local total=0
+    local token
+    local value
+
+    read -ra tokens <<< "$expression"
+
+    for token in "${tokens[@]}"; do
+
+        value=$(parse_product "$token") || return 1
+
+        ((total+=value))
+
+    done
+
+    printf '%d' "$total"
+}
+
+# ============================================================
+# INTEGER -> CALAPH
+# ============================================================
+
+encode_integer() {
+    local value="$1"
+
+    if ((value == 0)); then
+        printf '<>'
+        return
+    fi
+
+    local output=""
+    local hundreds
+    local remainder
+    local part
+
+    while ((value >= 50)); do
+
+        if ((value >= 100)); then
+
+            hundreds=$((value / 100))
+
+            if [[ -n "$output" ]]; then
+                output+=" "
+            fi
+
+            if ((hundreds == 1)); then
+
+                output+=",,,.',,,."
+
+            else
+
+                part=$(encode_integer "$hundreds")
+
+                output+="${part}',,,."
+            fi
+
+            value=$((value - hundreds * 100))
+
+        else
+
+            if [[ -n "$output" ]]; then
+                output+=" "
+            fi
+
+            # Preferred representation for 50
+            output+=".,',,."
+
+            value=$((value - 50))
+        fi
+    done
+
+    if ((value > 0)); then
+
+        if [[ -n "$output" ]]; then
+            output+=" "
+        fi
+
+        if ((value <= 10)); then
+
+            part=$(primitive_for_number "$value")
+            output+="$part"
+
+        else
+
+            local threes=$((value / 3))
+            local remainder=$((value % 3))
+
+            for ((i=0; i<threes; i++)); do
+                output+=","
+            done
+
+            if ((remainder == 1)); then
+                output+="."
+            elif ((remainder == 2)); then
+                output+=".,"
+            fi
+        fi
+    fi
+
+    printf '%s' "$output"
+}
+
+# ============================================================
+# CHARACTER -> NUMBER
+# ============================================================
+
+character_to_number() {
+    local char="$1"
+
+    case "$char" in
+        A) printf '1' ;;
+        B) printf '2' ;;
+        C) printf '3' ;;
+        D) printf '4' ;;
+        E) printf '5' ;;
+        F) printf '6' ;;
+        G) printf '7' ;;
+        H) printf '8' ;;
+        I) printf '9' ;;
+        J) printf '10' ;;
+        K) printf '11' ;;
+        L) printf '12' ;;
+        M) printf '13' ;;
+        N) printf '14' ;;
+        Ñ) printf '15' ;;
+        O) printf '16' ;;
+        P) printf '17' ;;
+        Q) printf '18' ;;
+        R) printf '19' ;;
+        S) printf '20' ;;
+        T) printf '21' ;;
+        U) printf '22' ;;
+        V) printf '23' ;;
+        W) printf '24' ;;
+        X) printf '25' ;;
+        Y) printf '26' ;;
+        Z) printf '27' ;;
+
+        Α) printf '28' ;;
+        Β) printf '29' ;;
+        Γ) printf '30' ;;
+        Δ) printf '31' ;;
+        Ε) printf '32' ;;
+        Ζ) printf '33' ;;
+        Η) printf '34' ;;
+        Θ) printf '35' ;;
+        Ι) printf '36' ;;
+        Κ) printf '37' ;;
+        Λ) printf '38' ;;
+        Μ) printf '39' ;;
+        Ν) printf '40' ;;
+        Ξ) printf '41' ;;
+        Ο) printf '42' ;;
+        Π) printf '43' ;;
+        Ρ) printf '44' ;;
+        Σ) printf '45' ;;
+        Τ) printf '46' ;;
+        Υ) printf '47' ;;
+        Φ) printf '48' ;;
+        Χ) printf '49' ;;
+        Ψ) printf '50' ;;
+        Ω) printf '51' ;;
+
+        А) printf '52' ;;
+        Б) printf '53' ;;
+        В) printf '54' ;;
+        Г) printf '55' ;;
+        Д) printf '56' ;;
+        Е) printf '57' ;;
+        Ё) printf '58' ;;
+        Ж) printf '59' ;;
+        З) printf '60' ;;
+        И) printf '61' ;;
+        Й) printf '62' ;;
+        К) printf '63' ;;
+        Л) printf '64' ;;
+        М) printf '65' ;;
+        Н) printf '66' ;;
+        О) printf '67' ;;
+        П) printf '68' ;;
+        Р) printf '69' ;;
+        С) printf '70' ;;
+        Т) printf '71' ;;
+        У) printf '72' ;;
+        Ф) printf '73' ;;
+        Х) printf '74' ;;
+        Ц) printf '75' ;;
+        Ч) printf '76' ;;
+        Ш) printf '77' ;;
+        Щ) printf '78' ;;
+        Ъ) printf '79' ;;
+        Ы) printf '80' ;;
+        Ь) printf '81' ;;
+        Э) printf '82' ;;
+        Ю) printf '83' ;;
+        Я) printf '84' ;;
 
         *)
-
-            printf "${RED}Invalid option.${RESET}\n"
-
-            pause_program
+            return 1
             ;;
-
     esac
+}
 
-done
+# ============================================================
+# NUMBER -> CHARACTER
+# ============================================================
+
+number_to_character() {
+    local n="$1"
+
+    case "$n" in
+        1) printf 'A' ;;
+        2) printf 'B' ;;
+        3) printf 'C' ;;
+        4) printf 'D' ;;
+        5) printf 'E' ;;
+        6) printf 'F' ;;
+        7) printf 'G' ;;
+        8) printf 'H' ;;
+        9) printf 'I' ;;
+        10) printf 'J' ;;
+        11) printf 'K' ;;
+        12) printf 'L' ;;
+        13) printf 'M' ;;
+        14) printf 'N' ;;
+        15) printf 'Ñ' ;;
+        16) printf 'O' ;;
+        17) printf 'P' ;;
+        18) printf 'Q' ;;
+        19) printf 'R' ;;
+        20) printf 'S' ;;
+        21) printf 'T' ;;
+        22) printf 'U' ;;
+        23) printf 'V' ;;
+        24) printf 'W' ;;
+        25) printf 'X' ;;
+        26) printf 'Y' ;;
+        27) printf 'Z' ;;
+
+        28) printf 'Α' ;;
+        29) printf 'Β' ;;
+        30) printf 'Γ' ;;
+        31) printf 'Δ' ;;
+        32) printf 'Ε' ;;
+        33) printf 'Ζ' ;;
+        34) printf 'Η' ;;
+        35) printf 'Θ' ;;
+        36) printf 'Ι' ;;
+        37) printf 'Κ' ;;
+        38) printf 'Λ' ;;
+        39) printf 'Μ' ;;
+        40) printf 'Ν' ;;
+        41) printf 'Ξ' ;;
+        42) printf 'Ο' ;;
+        43) printf 'Π' ;;
+        44) printf 'Ρ' ;;
+        45) printf 'Σ' ;;
+        46) printf 'Τ' ;;
+        47) printf 'Υ' ;;
+        48) printf 'Φ' ;;
+        49) printf 'Χ' ;;
+        50) printf 'Ψ' ;;
+        51) printf 'Ω' ;;
+
+        52) printf 'А' ;;
+        53) printf 'Б' ;;
+        54) printf 'В' ;;
+        55) printf 'Г' ;;
+        56) printf 'Д' ;;
+        57) printf 'Е' ;;
+        58) printf 'Ё' ;;
+        59) printf 'Ж' ;;
+        60) printf 'З' ;;
+        61) printf 'И' ;;
+        62) printf 'Й' ;;
+        63) printf 'К' ;;
+        64) printf 'Л' ;;
+        65) printf 'М' ;;
+        66) printf 'Н' ;;
+        67) printf 'О' ;;
+        68) printf 'П' ;;
+        69) printf 'Р' ;;
+        70) printf 'С' ;;
+        71) printf 'Т' ;;
+        72) printf 'У' ;;
+        73) printf 'Ф' ;;
+        74) printf 'Х' ;;
+        75) printf 'Ц' ;;
+        76) printf 'Ч' ;;
+        77) printf 'Ш' ;;
+        78) printf 'Щ' ;;
+        79) printf 'Ъ' ;;
+        80) printf 'Ы' ;;
+        81) printf 'Ь' ;;
+        82) printf 'Э' ;;
+        83) printf 'Ю' ;;
+        84) printf 'Я' ;;
+
+        *)
+            printf '?'
+            ;;
     esac
-done
+}
+
+# ============================================================
+# TEXT -> CALAPH
+# ============================================================
+
+text_to_calaph() {
+
+    header "TEXT" "ENCRYPT"
+
+    printf "${BOLD}${WHITE}  INPUT${RESET}\n"
+    line
+
+    printf '  Enter ordinary text:\n'
+    printf "${GREEN}  > ${RESET}"
+
+    IFS= read -r input
+
+    printf '\n'
+
+    printf "${BOLD}${WHITE}  PROCESSING${RESET}\n"
+    line
+
+    printf '\n'
+
+    local output=""
+    local i
+    local char
+    local number
+    local encoded
+
+    for ((i=0; i<${#input}; i++)); do
+
+        char="${input:i:1}"
+
+        if [[ "$char" == " " ]]; then
+
+            printf "${DIM}  [SPACE]${RESET}\n"
+            output+=" / "
+            continue
+        fi
+
+        number=$(character_to_number "$char")
+
+        if [[ $? -ne 0 ]]; then
+
+            printf "  %s ${RED}→ unsupported${RESET}\n" "$char"
+            output+=" ? "
+            continue
+        fi
+
+        encoded=$(encode_integer "$number")
+
+        printf "  %s ${CYAN}→${RESET} %s\n" \
+            "$char" "$encoded"
+
+        if [[ -n "$output" && "$output" != *" / " ]]; then
+            output+=" "
+        fi
+
+        output+="$encoded"
+    done
+
+    printf '\n'
+
+    printf "${BOLD}${WHITE}  OUTPUT${RESET}\n"
+    line
+
+    printf "${GREEN}  %s${RESET}\n" "$output"
+}
+
+# ============================================================
+# CALAPH -> TEXT
+# ============================================================
+
+calaph_to_text() {
+
+    header "TEXT" "DECRYPT"
+
+    printf "${BOLD}${WHITE}  INPUT${RESET}\n"
+    line
+
+    printf '  Enter Calaph:\n'
+    printf "${GREEN}  > ${RESET}"
+
+    IFS= read -r input
+
+    printf '\n'
+
+    printf "${BOLD}${WHITE}  OUTPUT${RESET}\n"
+    line
+
+    printf "${GREEN}  "
+
+    read -ra tokens <<< "$input"
+
+    local token
+    local value
+    local character
+
+    for token in "${tokens[@]}"; do
+
+        if [[ "$token" == "/" ]]; then
+
+            printf ' '
+
+        else
+
+            value=$(evaluate_calaph "$token")
+
+            if [[ $? -ne 0 ]]; then
+
+                printf '?'
+
+            else
+
+                character=$(number_to_character "$value")
+                printf '%s' "$character"
+            fi
+        fi
+    done
+
+    printf "${RESET}\n"
+}
+
+# ============================================================
+# MORSE ENCODING
+# ============================================================
+
+morse_encode_char() {
+
+    case "${1^^}" in
+
+        A) printf '.-' ;;
+        B) printf '-...' ;;
+        C) printf '-.-.' ;;
+        D) printf '-..' ;;
+        E) printf '.' ;;
+        F) printf '..-.' ;;
+        G) printf '--.' ;;
+        H) printf '....' ;;
+        I) printf '..' ;;
+        J) printf '.---' ;;
+        K) printf '-.-' ;;
+        L) printf '.-..' ;;
+        M) printf '--' ;;
+        N) printf '-.' ;;
+        O) printf '---' ;;
+        P) printf '.--.' ;;
+        Q) printf '--.-' ;;
+        R) printf '.-.' ;;
+        S) printf '...' ;;
+        T) printf '-' ;;
+        U) printf '..-' ;;
+        V) printf '...-' ;;
+        W) printf '.--' ;;
+        X) printf '-..-' ;;
+        Y) printf '-.--' ;;
+        Z) printf '--..' ;;
+
+        0) printf '-----' ;;
+        1) printf '.----' ;;
+        2) printf '..---' ;;
+        3) printf '...--' ;;
+        4) printf '....-' ;;
+        5) printf '.....' ;;
+        6) printf '-....' ;;
+        7) printf '--...' ;;
+        8) printf '---..' ;;
+        9) printf '----.' ;;
+
+        *) return 1 ;;
+    esac
+}
+
+# ============================================================
+# MORSE DECODING
+# ============================================================
+
+morse_decode_code() {
+
+    case "$1" in
+
+        .-) printf 'A' ;;
+        -...) printf 'B' ;;
+        -.-.) printf 'C' ;;
+        -..) printf 'D' ;;
+        .) printf 'E' ;;
+        ..-.) printf 'F' ;;
+        --.) printf 'G' ;;
+        ....) printf 'H' ;;
+        ..) printf 'I' ;;
+        .---) printf 'J' ;;
+        -.-) printf 'K' ;;
+        .-..) printf 'L' ;;
+        --) printf 'M' ;;
+        -.) printf 'N' ;;
+        ---) printf 'O' ;;
+        .--.) printf 'P' ;;
+        --.-) printf 'Q' ;;
+        .-.) printf 'R' ;;
+        ...) printf 'S' ;;
+        -) printf 'T' ;;
+        ..-) printf 'U' ;;
+        ...-) printf 'V' ;;
+        .--) printf 'W' ;;
+        -..-) printf 'X' ;;
+        -.--) printf 'Y' ;;
+        --..) printf 'Z' ;;
+
+        -----) printf '0' ;;
+        .----) printf '1' ;;
+        ..---) printf '2' ;;
+        ...--) printf '3' ;;
+        ....-) printf '4' ;;
+        .....) printf '5' ;;
+        -....) printf '6' ;;
+        --...) printf '7' ;;
+        ---..) printf '8' ;;
+        ----.) printf '9' ;;
+
+        *) printf '?' ;;
+    esac
+}
+
+# ============================================================
+# CALAPH -> MORSE
+# ============================================================
+
+calaph_to_morse() {
+
+    header "CODES" "CALAPH → MORSE"
+
+    printf "${BOLD}${WHITE}  INPUT${RESET}\n"
+    line
+
+    printf '  Enter Calaph:\n'
+    printf "${GREEN}  > ${RESET}"
+
+    IFS= read -r input
+
+    printf '\n'
+
+    printf "${BOLD}${WHITE}  MORSE OUTPUT${RESET}\n"
+    line
+
+    printf "${GREEN}  "
+
+    read -ra tokens <<< "$input"
+
+    local token
+    local value
+    local character
+    local morse
+
+    for token in "${tokens[@]}"; do
+
+        if [[ "$token" == "/" ]]; then
+
+            printf '/ '
+
+        else
+
+            value=$(evaluate_calaph "$token")
+
+            if ((value >= 1 && value <= 26)); then
+
+                character=$(number_to_character "$value")
+                morse=$(morse_encode_char "$character")
+
+                printf '%s ' "$morse"
+
+            else
+
+                printf '? '
+            fi
+        fi
+    done
+
+    printf "${RESET}\n"
+}
+
+# ============================================================
+# MORSE -> CALAPH
+# ============================================================
+
+morse_to_calaph() {
+
+    header "CODES" "MORSE → CALAPH"
+
+    printf "${BOLD}${WHITE}  INPUT${RESET}\n"
+    line
+
+    printf '  Enter Morse:\n'
+    printf "${GREEN}  > ${RESET}"
+
+    IFS= read -r input
+
+    printf '\n'
+
+    printf "${BOLD}${WHITE}  CALAPH OUTPUT${RESET}\n"
+    line
+
+    printf "${GREEN}  "
+
+    read -ra tokens <<< "$input"
+
+    local token
+    local character
+    local number
+    local encoded
+
+    for token in "${tokens[@]}"; do
+
+        if [[ "$token" == "/" ]]; then
+
+            printf '/ '
+
+        else
+
+            character=$(morse_decode_code "$token")
+
+            if [[ "$character" == '?' ]]; then
+
+                printf '? '
+
+            else
+
+                number=$(character_to_number "$character")
+                encoded=$(encode_integer "$number")
+
+                printf '%s ' "$encoded"
+            fi
+        fi
+    done
+
+    printf "${RESET}\n"
+}
+
+# ============================================================
+# CALAPH -> HEXADECIMAL
+# ============================================================
+
+calaph_to_hex() {
+
+    header "CODES" "CALAPH → HEXADECIMAL"
+
+    printf "${BOLD}${WHITE}  INPUT${RESET}\n"
+    line
+
+    printf '  Enter Calaph:\n'
+    printf "${GREEN}  > ${RESET}"
+
+    IFS= read -r input
+
+    printf '\n'
+
+    printf "${BOLD}${WHITE}  HEXADECIMAL OUTPUT${RESET}\n"
+    line
+
+    printf "${GREEN}  "
+
+    read -ra tokens <<< "$input"
+
+    local token
+    local value
+
+    for token in "${tokens[@]}"; do
+
+        if [[ "$token" == "/" ]]; then
+
+            printf '20 '
+
+        else
+
+            value=$(evaluate_calaph "$token")
+
+            if [[ $? -ne 0 || $value -lt 0 || $value -gt 255 ]]; then
+
+                printf '?? '
+
+            else
+
+                printf '%02X ' "$value"
+            fi
+        fi
+    done
+
+    printf "${RESET}\n"
+}
+
+# ============================================================
+# HEXADECIMAL -> CALAPH
+# ============================================================
+
+hex_to_calaph() {
+
+    header "CODES" "HEXADECIMAL → CALAPH"
+
+    printf "${BOLD}${WHITE}  INPUT${RESET}\n"
+    line
+
+    printf '  Enter hexadecimal:\n'
+    printf "${GREEN}  > ${RESET}"
+
+    IFS= read -r input
+
+    printf '\n'
+
+    printf "${BOLD}${WHITE}  CALAPH OUTPUT${RESET}\n"
+    line
+
+    printf "${GREEN}  "
+
+    read -ra tokens <<< "$input"
+
+    local token
+    local value
+    local encoded
+
+    for token in "${tokens[@]}"; do
+
+        if [[ ! "$token" =~ ^[0-9a-fA-F]+$ ]]; then
+
+            printf '? '
+            continue
+        fi
+
+        value=$((16#$token))
+
+        if ((value > 255)); then
+
+            printf '? '
+
+        elif ((value == 32)); then
+
+            printf '/ '
+
+        else
+
+            encoded=$(encode_integer "$value")
+            printf '%s ' "$encoded"
+        fi
+    done
+
+    printf "${RESET}\n"
+}
+
+# ============================================================
+# CALAPH -> BINARY
+# ============================================================
+
+calaph_to_binary() {
+
+    header "CODES" "CALAPH → BINARY"
+
+    printf "${BOLD}${WHITE}  INPUT${RESET}\n"
+    line
+
+    printf '  Enter Calaph:\n'
+    printf "${GREEN}  > ${RESET}"
+
+    IFS= read -r input
+
+    printf '\n'
+
+    printf "${BOLD}${WHITE}  BINARY OUTPUT${RESET}\n"
+    line
+
+    printf "${GREEN}  "
+
+    read -ra tokens <<< "$input"
+
+    local token
+    local value
+    local binary
+
+    for token in "${tokens[@]}"; do
+
+        if [[ "$token" == "/" ]]; then
+
+            printf '00100000 '
+
+        else
+
+            value=$(evaluate_calaph "$token")
+
+            if [[ $? -ne 0 || $value -lt 0 || $value -gt 255 ]]; then
+
+                printf '???????? '
+
+            else
+
+                printf '%08d ' "$(bc <<< "obase=2; $value")"
+            fi
+        fi
+    done
+
+    printf "${RESET}\n"
+}
+
+# ============================================================
+# BINARY -> CALAPH
+# ============================================================
+
+binary_to_calaph() {
+
+    header "CODES" "BINARY → CALAPH"
+
+    printf "${BOLD}${WHITE}  INPUT${RESET}\n"
+    line
+
+    printf '  Enter binary:\n'
+    printf "${GREEN}  > ${RESET}"
+
+    IFS= read -r input
+
+    printf '\n'
+
+    printf "${BOLD}${WHITE}  CALAPH OUTPUT${RESET}\n"
+    line
+
+    printf "${GREEN}  "
+
+    read -ra tokens <<< "$input"
+
+    local token
+    local value
+    local encoded
+    local valid
+
+    for token in "${tokens[@]}"; do
+
+        valid=1
+
+        if [[ ! "$token" =~ ^[01]{8}$ ]]; then
+
+            valid=0
+
+        else
+
+            value=$((2#$token))
+        fi
+
+        if ((valid == 0)); then
+
+            printf '? '
+
+        elif ((value == 32)); then
+
+            printf '/ '
+
+        else
+
+            encoded=$(encode_integer "$value")
+            printf '%s ' "$encoded"
+        fi
+    done
+
+    printf "${RESET}\n"
+}
+
+# ============================================================
+# TEXT MODE
+# ============================================================
+
+text_menu() {
+
+    local option
+
+    while true; do
+
+        header "TEXT MODE" "OPERATIONS"
+
+        printf "${BOLD}${WHITE}"
+        printf '  ┌──────────────────────────────────────────────────────┐\n'
+        printf '  │                    TEXT OPERATIONS                   │\n'
+        printf '  └──────────────────────────────────────────────────────┘\n'
+        printf "${RESET}"
+
+        printf '\n'
+
+        printf "${CYAN}  [ 1 ] ${RESET}${BOLD}Encrypt text to Calaph${RESET}\n"
+        printf "${DIM}        TEXT ───────────────────────────► CALAPH${RESET}\n"
+
+        printf '\n'
+
+        printf "${CYAN}  [ 2 ] ${RESET}${BOLD}Decrypt Calaph to text${RESET}\n"
+        printf "${DIM}        CALAPH ─────────────────────────► TEXT${RESET}\n"
+
+        printf '\n'
+
+        printf "${CYAN}  [ 3 ] ${RESET}Return to main menu\n"
+
+        printf '\n'
+
+        double_line
+
+        printf '\n'
+
+        printf "${BOLD}  SELECT AN OPTION ${RESET}${CYAN}[1-3]${RESET}: "
+
+        read -r option
+
+        case "$option" in
+
+            1)
+                text_to_calaph
+                pause_screen
+                ;;
+
+            2)
+                calaph_to_text
+                pause_screen
+                ;;
+
+            3)
+                return
+                ;;
+
+            *)
+                printf "${RED}\n  ✖ Invalid option.${RESET}\n"
+                pause_screen
+                ;;
+        esac
+    done
+}
+
+# ============================================================
+# CODE MODE
+# ============================================================
+
+code_menu() {
+
+    local option
+
+    while true; do
+
+        header "CODE MODE" "CONVERSION MATRIX"
+
+        printf "${BOLD}${WHITE}"
+        printf '  ┌──────────────────────────────────────────────────────┐\n'
+        printf '  │                 CALAPH CONVERSION MATRIX             │\n'
+        printf '  └──────────────────────────────────────────────────────┘\n'
+        printf "${RESET}"
+
+        printf '\n'
+
+        printf "${MAGENTA}"
+        printf '                         CALAPH\n'
+        printf "${RESET}"
+
+        printf '                           │\n'
+        printf '              ┌────────────┼────────────┐\n'
+        printf '              │            │            │\n'
+        printf '              ▼            ▼            ▼\n'
+
+        printf "${CYAN}"
+        printf '           BINARY       HEXADECIMAL    MORSE\n'
+        printf "${RESET}"
+
+        printf '              ▲            ▲            ▲\n'
+        printf '              │            │            │\n'
+        printf '              └────────────┼────────────┘\n'
+        printf '                           │\n'
+
+        printf "${MAGENTA}"
+        printf '                         CALAPH\n'
+        printf "${RESET}"
+
+        printf '\n'
+
+        line
+
+        printf '\n'
+
+        printf "${CYAN}  [ 1 ] ${RESET}${BOLD}CALAPH${RESET}  →  BINARY\n"
+        printf "${CYAN}  [ 2 ] ${RESET}${BOLD}BINARY${RESET}  →  CALAPH\n"
+
+        printf '\n'
+
+        printf "${CYAN}  [ 3 ] ${RESET}${BOLD}CALAPH${RESET}  →  HEXADECIMAL\n"
+        printf "${CYAN}  [ 4 ] ${RESET}${BOLD}HEXADECIMAL${RESET}  →  CALAPH\n"
+
+        printf '\n'
+
+        printf "${CYAN}  [ 5 ] ${RESET}${BOLD}CALAPH${RESET}  →  MORSE\n"
+        printf "${CYAN}  [ 6 ] ${RESET}${BOLD}MORSE${RESET}  →  CALAPH\n"
+
+        printf '\n'
+
+        printf "${CYAN}  [ 7 ] ${RESET}Return to main menu\n"
+
+        printf '\n'
+
+        double_line
+
+        printf '\n'
+
+        printf "${BOLD}  SELECT AN OPTION ${RESET}${CYAN}[1-7]${RESET}: "
+
+        read -r option
+
+        case "$option" in
+
+            1)
+                calaph_to_binary
+                pause_screen
+                ;;
+
+            2)
+                binary_to_calaph
+                pause_screen
+                ;;
+
+            3)
+                calaph_to_hex
+                pause_screen
+                ;;
+
+            4)
+                hex_to_calaph
+                pause_screen
+                ;;
+
+            5)
+                calaph_to_morse
+                pause_screen
+                ;;
+
+            6)
+                morse_to_calaph
+                pause_screen
+                ;;
+
+            7)
+                return
+                ;;
+
+            *)
+                printf "${RED}\n  ✖ Invalid option.${RESET}\n"
+                pause_screen
+                ;;
+        esac
+    done
+}
+
+# ============================================================
+# MAIN MENU
+# ============================================================
+
+main_menu() {
+
+    local option
+
+    while true; do
+
+        main_header
+
+        printf "${BOLD}  MAIN MENU${RESET}\n"
+
+        printf '\n'
+
+        printf "${CYAN}"
+        printf '  ╔══════════════════════════════════════════════════════╗\n'
+        printf "${RESET}"
+
+        printf "${CYAN}  ║${RESET}                                                      ${CYAN}║${RESET}\n"
+
+        printf "${CYAN}  ║${RESET}   ${BOLD}${CYAN}[ 1 ]${RESET}  ◈  ${BOLD}WORK WITH TEXT${RESET}                         ${CYAN}║${RESET}\n"
+
+        printf "${CYAN}  ║${RESET}        Encrypt and decrypt ordinary text             ${CYAN}║${RESET}\n"
+
+        printf "${CYAN}  ║${RESET}                                                      ${CYAN}║${RESET}\n"
+
+        printf "${CYAN}  ║${RESET}   ${BOLD}${MAGENTA}[ 2 ]${RESET}  ◇  ${BOLD}WORK WITH CODES${RESET}                        ${CYAN}║${RESET}\n"
+
+        printf "${CYAN}  ║${RESET}        Binary · Hexadecimal · Morse                  ${CYAN}║${RESET}\n"
+
+        printf "${CYAN}  ║${RESET}                                                      ${CYAN}║${RESET}\n"
+
+        printf "${CYAN}  ║${RESET}   ${BOLD}${RED}[ 3 ]${RESET}  ×  ${BOLD}EXIT${RESET}                                      ${CYAN}║${RESET}\n"
+
+        printf "${CYAN}  ║${RESET}                                                      ${CYAN}║${RESET}\n"
+
+        printf "${CYAN}"
+        printf '  ╚══════════════════════════════════════════════════════╝\n'
+        printf "${RESET}"
+
+        printf '\n'
+
+        printf "${DIM}"
+        printf '  ┌────────────────────────────────────────────────────┐\n'
+        printf "  │${RESET}${BOLD}  SELECT AN OPTION ${RESET}${CYAN}[1-3]${RESET}${DIM}:                                    │\n"
+        printf '  └────────────────────────────────────────────────────┘\n'
+        printf "${RESET}"
+
+        printf '\n  '
+
+        read -r option
+
+        case "$option" in
+
+            1)
+                text_menu
+                ;;
+
+            2)
+                code_menu
+                ;;
+
+            3)
+
+                clear_screen
+
+                printf '\n'
+
+                top_border
+
+                printf "${CYAN}  ║${RESET}                                                          ${CYAN}║${RESET}\n"
+
+                printf "${CYAN}  ║${RESET}${BOLD}${GREEN}                     CALAPH CLOSED                     ${RESET}${CYAN}║${RESET}\n"
+
+                printf "${CYAN}  ║${RESET}                                                          ${CYAN}║${RESET}\n"
+
+                printf "${CYAN}  ║${RESET}${DIM}              Thank you for using Calaph.              ${RESET}${CYAN}║${RESET}\n"
+
+                printf "${CYAN}  ║${RESET}                                                          ${CYAN}║${RESET}\n"
+
+                bottom_border
+
+                printf '\n'
+
+                return
+                ;;
+
+            *)
+                printf "${RED}\n  ✖ Invalid option.${RESET}\n"
+                pause_screen
+                ;;
+        esac
+    done
+}
+
+# ============================================================
+# START CALAPH
+# ============================================================
+
+main_menu
