@@ -1,25 +1,835 @@
+# Calaph
+
+**Calaph** is a numerical language and symbolic encoding system implemented in **C**. It represents information through numerical values, primitive symbols, and arithmetic composition, providing a structured way to work with text and other encoding systems from the terminal.
+
+Calaph is designed as a lightweight, portable, and dependency-free command-line application. Its primary implementation is written in C and is intended to compile across Linux, FreeBSD, macOS, and Windows environments.
+
+> **Note:** Calaph is a numerical language and symbolic representation system, not a cryptographically secure encryption algorithm.
+
+## Features
+
+* Native C implementation
+* Lightweight terminal application
+* No external runtime libraries
+* Text-to-Calaph conversion
+* Calaph-to-text conversion
+* Calaph-to-binary conversion
+* Binary-to-Calaph conversion
+* Calaph-to-hexadecimal conversion
+* Hexadecimal-to-Calaph conversion
+* Calaph-to-Morse conversion
+* Morse-to-Calaph conversion
+* Latin alphabet support
+* Spanish `Ñ` support
+* Greek alphabet support
+* Cyrillic alphabet support
+* Numerical expressions
+* Addition and multiplication
+* Decimal notation
+* ANSI terminal interface
+* Input validation
+* Portable source code
+
+## Calaph Numerical System
+
+Calaph is built around a small set of primitive symbols and operations:
+
+| Symbol | Meaning                    |
+| ------ | -------------------------- |
+| `.`    | 1                          |
+| `,`    | 3                          |
+| `<>`   | 0                          |
+| `'`    | Multiplication             |
+| Space  | Addition                   |
+| `\|`   | Decimal separator          |
+| `\`    | Fractional digit separator |
+
+The primitive symbols can be combined to construct larger numerical values.
+
+### Primitive Values
+
+```text
+.       = 1
+.,      = 4
+,.      = 4
+.,,     = 5
+,,      = 6
+,,.     = 7
+.,,,    = 8
+,,,     = 9
+,,,.    = 10
+<>      = 0
+```
+
+Different expressions may represent the same numerical value.
+
+For example:
+
+```text
+.,      = 4
+,.      = 4
+....    = 4
+```
+
+### Addition
+
+A space separates additive terms.
+
+```text
+,, ,,. = 6 + 7 = 13
+```
+
+### Multiplication
+
+The apostrophe character represents multiplication.
+
+```text
+,', = 3 × 3 = 9
+```
+
+This allows Calaph to construct larger numerical values through combinations of primitive values, addition, and multiplication.
+
+The current system defines the following preferred representation:
+
+```text
+.,',,. = 50
+```
+
+## Decimal Notation
+
+Calaph uses `|` to separate the integer portion from the fractional portion and `\` to separate individual fractional digits.
+
+For example:
+
+```text
+,|.\,.
+```
+
+represents:
+
+```text
+3.14
+```
+
+Zero is represented by:
+
+```text
+<>
+```
+
+## Character Mapping
+
+Calaph associates supported characters with numerical values.
+
+### Latin Alphabet
+
+The Latin alphabet occupies values `1–27`, including Spanish `Ñ`.
+
+```text
+A  = 1
+B  = 2
+C  = 3
+D  = 4
+E  = 5
+F  = 6
+G  = 7
+H  = 8
+I  = 9
+J  = 10
+K  = 11
+L  = 12
+M  = 13
+N  = 14
+Ñ  = 15
+O  = 16
+P  = 17
+Q  = 18
+R  = 19
+S  = 20
+T  = 21
+U  = 22
+V  = 23
+W  = 24
+X  = 25
+Y  = 26
+Z  = 27
+```
+
+### Greek Alphabet
+
+The Greek alphabet occupies values `28–51`.
+
+```text
+Α = 28
+Β = 29
+Γ = 30
+Δ = 31
+Ε = 32
+Ζ = 33
+Η = 34
+Θ = 35
+Ι = 36
+Κ = 37
+Λ = 38
+Μ = 39
+Ν = 40
+Ξ = 41
+Ο = 42
+Π = 43
+Ρ = 44
+Σ = 45
+Τ = 46
+Υ = 47
+Φ = 48
+Χ = 49
+Ψ = 50
+Ω = 51
+```
+
+### Cyrillic Alphabet
+
+The Russian Cyrillic alphabet occupies values `52–84`.
+
+```text
+А = 52
+Б = 53
+В = 54
+Г = 55
+Д = 56
+Е = 57
+Ё = 58
+Ж = 59
+З = 60
+И = 61
+Й = 62
+К = 63
+Л = 64
+М = 65
+Н = 66
+О = 67
+П = 68
+Р = 69
+С = 70
+Т = 71
+У = 72
+Ф = 73
+Х = 74
+Ц = 75
+Ч = 76
+Ш = 77
+Щ = 78
+Ъ = 79
+Ы = 80
+Ь = 81
+Э = 82
+Ю = 83
+Я = 84
+```
+
+## Text Mode
+
+Text Mode provides a direct interface for working with ordinary text and Calaph.
+
+```text
+TEXT
+  |
+  v
+CHARACTER MAPPING
+  |
+  v
+NUMERICAL VALUE
+  |
+  v
+CALAPH
+```
+
+The reverse operation evaluates Calaph expressions and converts the resulting numerical values back into characters.
+
+```text
+CALAPH
+  |
+  v
+NUMERICAL PARSER
+  |
+  v
+NUMERICAL VALUE
+  |
+  v
+CHARACTER MAPPING
+  |
+  v
+TEXT
+```
+
+### Available Operations
+
+```text
+[ 1 ] Encrypt text to Calaph
+[ 2 ] Decrypt Calaph to text
+[ 3 ] Return to main menu
+```
+
+## Code Mode
+
+Code Mode provides bidirectional conversion between Calaph and several conventional encoding systems.
+
+```text
+                    CALAPH
+                      |
+          +-----------+-----------+
+          |           |           |
+          v           v           v
+       BINARY       HEXADECIMAL  MORSE
+          ^           ^           ^
+          |           |           |
+          +-----------+-----------+
+                      |
+                    CALAPH
+```
+
+### Available Operations
+
+```text
+[ 1 ] CALAPH → BINARY
+[ 2 ] BINARY → CALAPH
+
+[ 3 ] CALAPH → HEXADECIMAL
+[ 4 ] HEXADECIMAL → CALAPH
+
+[ 5 ] CALAPH → MORSE
+[ 6 ] MORSE → CALAPH
+
+[ 7 ] Return to main menu
+```
+
+## Binary
+
+Calaph numerical values can be represented as 8-bit binary values.
+
+Example:
+
+```text
+5 = 00000101
+```
+
+Binary input is validated before conversion.
+
+Text spaces are represented by the byte:
+
+```text
+00100000
+```
+
+## Hexadecimal
+
+Calaph numerical values can be represented using hexadecimal notation.
+
+Examples:
+
+```text
+5  = 05
+10 = 0A
+15 = 0F
+```
+
+Text spaces are represented by:
+
+```text
+20
+```
+
+Hexadecimal input is validated before conversion to Calaph.
+
+## Morse
+
+Calaph supports conversion to and from conventional Morse code for supported Latin letters and decimal digits.
+
+Examples:
+
+```text
+A = .-
+B = -...
+C = -.-.
+D = -..
+E = .
+```
+
+Digits are represented using standard Morse notation:
+
+```text
+0 = -----
+1 = .----
+2 = ..---
+3 = ...--
+4 = ....-
+5 = .....
+6 = -....
+7 = --...
+8 = ---..
+9 = ----.
+```
+
+Characters outside the supported Morse character set are reported as unsupported.
+
+## Architecture
+
+The C implementation is organized around several functional components:
+
+```text
 Calaph
+|
++-- Terminal Utilities
+|
++-- Visual Interface
+|   +-- Headers
+|   +-- Borders
+|   +-- Menus
+|   +-- Output Formatting
+|
++-- Numerical System
+|   +-- Primitive Encoding
+|   +-- Primitive Parsing
+|   +-- Expression Evaluation
+|   +-- Integer Encoding
+|
++-- Character System
+|   +-- Latin
+|   +-- Greek
+|   +-- Cyrillic
+|
++-- Text Conversion
+|   +-- Text → Calaph
+|   +-- Calaph → Text
+|
++-- Code Conversion
+    +-- Calaph ↔ Binary
+    +-- Calaph ↔ Hexadecimal
+    +-- Calaph ↔ Morse
+```
 
-Calaph is a mathematical symbolic encoding system designed to represent numerical and textual information using a small set of primitive symbols, arithmetic operations, decimal notation, and sequential character mappings. The system is language-independent: C, Bash, or any other implementation language can implement the same Calaph rules while providing different interfaces and execution environments. Calaph is designed around composability rather than assigning a unique primitive symbol to every possible numerical value, allowing complex values to be constructed from a limited symbolic vocabulary.
+The core implementation is maintained as a single C source file to keep the language easy to inspect, compile, modify, and extend.
 
-The fundamental numerical symbols are . for 1, , for 3, and <> for 0. The basic numerical representations are . = 1, ., = 2, , = 3, ,. = 4, .,, = 5, ,, = 6, ,,. = 7, .,,, = 8, ,,, = 9, and ,,,. = 10. Larger values are constructed using arithmetic composition. A space between numerical blocks represents addition, while ' represents multiplication. For example, . . evaluates to 2, , . evaluates to 4, and ,', evaluates to 9 because it represents 3 × 3. Multiplication is currently restricted to one multiplication operator per product, meaning A'B is valid while A'B'C is invalid. This restriction keeps the syntax deterministic and simplifies parsing and validation.
+## Requirements
 
-Calaph allows multiple representations of the same numerical value. For example, ,. represents 4 through 3 + 1, while . . . . also represents 4 through repeated addition. Larger values can be constructed using multiplication and addition rather than requiring an individual primitive representation for every integer. For example, 50 can be represented as .,',,. according to the current representation rules. This means that Calaph expressions have a distinction between their syntactic representation and their evaluated numerical value: different valid expressions may produce the same result. An implementation may therefore provide canonical or optimized representations without changing the underlying numerical semantics of Calaph.
+Calaph requires:
 
-Decimal values use | as the separator between the integer and fractional portions and \ between individual fractional digits. For example, ,|.\,. represents 3.14, where , represents 3, . represents 1, and ,. represents 4. Zero is represented by <>. The decimal syntax is handled separately from the arithmetic grammar so that | and \ function as structural delimiters rather than arithmetic operators.
+* A C compiler supporting C99 or later
+* The standard C library
+* A terminal capable of displaying ANSI escape sequences
+* UTF-8 locale support for extended character sets
 
-Calaph also provides a textual encoding layer. Characters are assigned numerical identifiers, which are then represented using the Calaph numerical system. The current unified character mapping contains three alphabets in a continuous numerical namespace. Latin characters occupy values 1–27, including Ñ; Greek characters occupy 28–51; and Russian Cyrillic characters occupy 52–84. The mapping therefore begins with A = 1, B = 2, C = 3 and continues through Z = 27, with Ñ = 15. Greek begins at Α = 28 and ends at Ω = 51, followed by Cyrillic beginning at А = 52 and ending at Я = 84. Encoding a character consists of resolving the character through this mapping and converting its numerical identifier into a valid Calaph expression. Decoding performs the inverse process by evaluating the expression and resolving the resulting number through the character table.
+Recommended compilers include:
 
-The numerical and textual layers are intentionally separated. The numerical engine is responsible for recognizing primitives, parsing arithmetic expressions, validating syntax, and evaluating numerical values, while the character layer is responsible for mapping those values to and from characters. This separation allows the numerical system to be reused independently of text encoding and allows additional alphabets or character sets to be added without changing the fundamental arithmetic system.
+* GCC
+* Clang
+* MinGW-w64 GCC
 
-The C implementation provides a compiled native implementation of Calaph. It is responsible for reading input, tokenizing Calaph expressions, validating the syntax, evaluating numerical expressions, performing character mapping, and producing encoded or decoded output. A modular implementation can separate these operations into functions such as encode_number(), decode_number(), encode_character(), decode_character(), encode_text(), and decode_text(). The C implementation provides direct control over memory, numerical types, buffers, parsing, and character processing, making it suitable for a strict implementation of the Calaph grammar and for applications where execution performance and deterministic behavior are important.
+No external libraries are required.
 
+## Installation
 
-A Calaph implementation can be understood as a small domain-specific language processor. During encoding, external data is transformed from input characters into numerical identifiers and then into Calaph expressions. During decoding, the serialized Calaph expression is tokenized, validated, evaluated, and converted back into numerical identifiers and characters. Conceptually, the encoding pipeline is input → character mapping → numerical value → Calaph expression → serialized output, while decoding reverses the process as serialized Calaph → tokens → validated expression → numerical value → character mapping → output. Separating lexical analysis, syntax validation, semantic evaluation, and character mapping makes the implementation easier to maintain and allows different programming languages to implement the same specification.
+### Debian / Ubuntu / Linux Mint
 
-Calaph is an encoding and representation system, not an encryption algorithm. Its representations are reversible when the syntax and character mapping are known, and therefore Calaph does not provide cryptographic confidentiality, authentication, or protection against decoding. Any cryptographic functionality added in the future should be implemented as a separate layer rather than being considered part of the mathematical encoding mechanism itself.
+Install the required tools:
 
-The current implementations are intended to establish the core functionality of Calaph while the specification continues to evolve. Future development can formalize the grammar, define canonical representations, improve numerical optimization, establish strict serialization rules, expand character-set support, improve Unicode handling, and provide interoperability tests between independent implementations. The goal is for an implementation written in C, Bash, or another language to produce and consume the same valid Calaph representations according to the same underlying specification.
+```bash
+sudo apt update
+sudo apt install build-essential git
+```
 
-Calaph is therefore a composable mathematical symbolic encoding system in which a small primitive vocabulary is used to construct numerical expressions, numerical expressions are mapped to characters, and characters can be serialized into a representation that can be processed by independent implementations. The specification defines the meaning of the symbols and operations, while implementations such as C and Bash define how those rules are parsed, evaluated, and exposed to users.
+Clone the repository:
+
+```bash
+git clone https://github.com/ariel-o-programmatistis/Calaph.git
+cd Calaph
+```
+
+Compile:
+
+```bash
+gcc -x c -Wall -Wextra -O2 "calaph c" -o calaph
+```
+
+Run:
+
+```bash
+./calaph
+```
+
+To install Calaph system-wide:
+
+```bash
+sudo install -m 755 calaph /usr/local/bin/calaph
+```
+
+Then run:
+
+```bash
+calaph
+```
+
+### Fedora
+
+Install GCC and Git:
+
+```bash
+sudo dnf install gcc git
+```
+
+Clone and compile:
+
+```bash
+git clone https://github.com/ariel-o-programmatistis/Calaph.git
+cd Calaph
+gcc -x c -Wall -Wextra -O2 "calaph c" -o calaph
+```
+
+Run:
+
+```bash
+./calaph
+```
+
+Optional system installation:
+
+```bash
+sudo install -m 755 calaph /usr/local/bin/calaph
+```
+
+### Arch Linux / Manjaro
+
+Install the development tools:
+
+```bash
+sudo pacman -S base-devel git
+```
+
+Clone and compile:
+
+```bash
+git clone https://github.com/ariel-o-programmatistis/Calaph.git
+cd Calaph
+gcc -x c -Wall -Wextra -O2 "calaph c" -o calaph
+```
+
+Run:
+
+```bash
+./calaph
+```
+
+Optional system installation:
+
+```bash
+sudo install -m 755 calaph /usr/local/bin/calaph
+```
+
+### openSUSE
+
+Install GCC and Git:
+
+```bash
+sudo zypper install gcc git
+```
+
+Clone and compile:
+
+```bash
+git clone https://github.com/ariel-o-programmatistis/Calaph.git
+cd Calaph
+gcc -x c -Wall -Wextra -O2 "calaph c" -o calaph
+```
+
+Run:
+
+```bash
+./calaph
+```
+
+### Alpine Linux
+
+Install the development tools:
+
+```bash
+sudo apk add build-base git
+```
+
+Clone and compile:
+
+```bash
+git clone https://github.com/ariel-o-programmatistis/Calaph.git
+cd Calaph
+gcc -x c -Wall -Wextra -O2 "calaph c" -o calaph
+```
+
+Run:
+
+```bash
+./calaph
+```
+
+### Gentoo
+
+Install GCC and Git:
+
+```bash
+sudo emerge --ask sys-devel/gcc dev-vcs/git
+```
+
+Clone and compile:
+
+```bash
+git clone https://github.com/ariel-o-programmatistis/Calaph.git
+cd Calaph
+gcc -x c -Wall -Wextra -O2 "calaph c" -o calaph
+```
+
+Run:
+
+```bash
+./calaph
+```
+
+## FreeBSD
+
+Install Git and GCC:
+
+```bash
+sudo pkg install git gcc
+```
+
+Clone the repository:
+
+```bash
+git clone https://github.com/ariel-o-programmatistis/Calaph.git
+cd Calaph
+```
+
+Compile:
+
+```bash
+gcc -x c -Wall -Wextra -O2 "calaph c" -o calaph
+```
+
+Run:
+
+```bash
+./calaph
+```
+
+Alternatively, FreeBSD's system compiler can be used:
+
+```bash
+cc -x c -Wall -Wextra -O2 "calaph c" -o calaph
+```
+
+Install system-wide:
+
+```bash
+sudo install -m 755 calaph /usr/local/bin/calaph
+```
+
+## macOS
+
+Install Apple's Command Line Tools:
+
+```bash
+xcode-select --install
+```
+
+Clone the repository:
+
+```bash
+git clone https://github.com/ariel-o-programmatistis/Calaph.git
+cd Calaph
+```
+
+Compile using Clang:
+
+```bash
+clang -x c -Wall -Wextra -O2 "calaph c" -o calaph
+```
+
+Run:
+
+```bash
+./calaph
+```
+
+Optional installation:
+
+```bash
+sudo install -m 755 calaph /usr/local/bin/calaph
+```
+
+Then:
+
+```bash
+calaph
+```
+
+## Windows
+
+Calaph can be compiled on Windows using a GCC-compatible environment such as **MSYS2** or **MinGW-w64**.
+
+### MSYS2
+
+Install MSYS2 and open the **UCRT64** terminal.
+
+Update the system:
+
+```bash
+pacman -Syu
+```
+
+Install GCC and Git:
+
+```bash
+pacman -S --needed mingw-w64-ucrt-x86_64-gcc git
+```
+
+Clone the repository:
+
+```bash
+git clone https://github.com/ariel-o-programmatistis/Calaph.git
+cd Calaph
+```
+
+Compile:
+
+```bash
+gcc -Wall -Wextra -O2 "calaph c" -o calaph.exe
+```
+
+Run:
+
+```bash
+./calaph.exe
+```
+
+### MinGW-w64
+
+With MinGW-w64 configured:
+
+```bash
+git clone https://github.com/ariel-o-programmatistis/Calaph.git
+cd Calaph
+gcc -Wall -Wextra -O2 "calaph c" -o calaph.exe
+```
+
+Run:
+
+```bash
+calaph.exe
+```
+
+The resulting executable can be placed in a directory included in the Windows `PATH`.
+
+## Generic Compilation
+
+If GCC is already installed:
+
+```bash
+gcc -x c -Wall -Wextra -O2 "calaph c" -o calaph
+```
+
+With Clang:
+
+```bash
+clang -x c -Wall -Wextra -O2 "calaph c" -o calaph
+```
+
+For strict compiler diagnostics:
+
+```bash
+gcc -x c -Wall -Wextra -Wpedantic -O2 "calaph c" -o calaph
+```
+
+For debugging:
+
+```bash
+gcc -x c -Wall -Wextra -Wpedantic -O0 -g "calaph c" -o calaph
+```
+
+## Usage
+
+After launching Calaph, the main menu provides two working modes:
+
+```text
+[ 1 ] WORK WITH TEXT
+[ 2 ] WORK WITH CODES
+[ 3 ] EXIT
+```
+
+### Text Mode
+
+```text
+[ 1 ] Encrypt text to Calaph
+[ 2 ] Decrypt Calaph to text
+[ 3 ] Return to main menu
+```
+
+### Code Mode
+
+```text
+[ 1 ] CALAPH → BINARY
+[ 2 ] BINARY → CALAPH
+
+[ 3 ] CALAPH → HEXADECIMAL
+[ 4 ] HEXADECIMAL → CALAPH
+
+[ 5 ] CALAPH → MORSE
+[ 6 ] MORSE → CALAPH
+
+[ 7 ] Return to main menu
+```
+
+## Development
+
+The recommended development build is:
+
+```bash
+gcc -x c -Wall -Wextra -Wpedantic -O2 "calaph c" -o calaph
+```
+
+For debugging:
+
+```bash
+gcc -x c -Wall -Wextra -Wpedantic -O0 -g "calaph c" -o calaph
+```
+
+The project is intentionally maintained as a compact C implementation so that the numerical system remains accessible to developers and can be extended without introducing unnecessary dependencies.
+
+## Project Structure
+
+```text
+Calaph/
+├── calaph c
+├── calaph bash
+└── README.md
+```
+
+The C implementation is the primary native implementation of Calaph.
+
+## Portability
+
+Calaph is designed to operate across multiple platforms using a standard C toolchain.
+
+Supported environments include:
+
+* Linux
+* FreeBSD
+* macOS
+* Windows through MSYS2 or MinGW-w64
+
+The core implementation does not require external libraries or a language runtime.
+
+## Project Status
+
+Calaph is under active development. The C implementation is the primary foundation of the project, with development focused on numerical consistency, parser reliability, portability, terminal usability, and expansion of the Calaph language.
+
+## Repository
+
+[Calaph on GitHub](https://github.com/ariel-o-programmatistis/Calaph)
+
 
